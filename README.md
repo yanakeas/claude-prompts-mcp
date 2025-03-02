@@ -34,6 +34,42 @@ A Node.js server implementing the Model Context Protocol (MCP) for Claude AI mod
    ```bash
    npm install
    ```
+4. Build index.js: 
+    ```bash
+    npm run build
+    ```
+
+## Starting the Server
+
+### Using npm scripts
+
+```bash
+npm start          # Start with default transport
+npm run start:sse  # Start with SSE transport
+npm run start:stdio # Start with STDIO transport
+```
+
+### Using direct command
+
+```bash
+node dist/index.js --transport=sse
+```
+
+## Using Built-in Commands
+
+The server supports the following built-in commands:
+
+- **process_slash_command**: Processes slash commands that trigger prompt templates with optional arguments
+  ```
+  /command_name argument1 argument2
+  ```
+
+- **listprompts**: Displays a formatted list of all available commands and their usage
+  ```
+  /listprompts
+  ```
+
+These commands can be used directly through the Claude interface once the MCP server is properly connected.
 
 ### Configuration
 
@@ -75,37 +111,16 @@ This file defines the custom prompt templates available through the server. Each
 - `file`: Path to the markdown file containing the prompt template
 - `arguments`: Expected arguments for the prompt
 
-## Starting the Server
+## Creating Custom Prompts
 
-### Using npm scripts
+1. Create a new markdown file in the appropriate category folder (e.g., `prompts/general/my_prompt.md`)
+2. Add the prompt template to the file using markdown format
+3. Register the prompt in `prompts.json` with appropriate metadata
+___
 
-```bash
-npm start          # Start with default transport
-npm run start:sse  # Start with SSE transport
-npm run start:stdio # Start with STDIO transport
-```
+### Claude config.json Configuration
 
-### Using direct command
-
-```bash
-node dist/index.js --transport=sse
-```
-
-## Connecting to the Server
-
-### Build the Server First
-
-Before connecting to the server, make sure to build it:
-
-```bash
-npm run build
-```
-
-This will compile the TypeScript code into JavaScript in the `dist` directory.
-
-### MCP-Bridge Configuration
-
-Add the following to your MCP-Bridge `config.json` file:
+Add the following to your claude_desktop or alternative, `config.json` file:
 
 ```json
 "mcp_servers": {
@@ -128,39 +143,7 @@ You can also specify additional arguments like the transport method:
 ```
 
 ### Using in Cursor or Claude UI
-
-Once the server is running and configured in MCP-Bridge, you can use the custom prompts by selecting "claude-prompts" as the MCP server.
-
-## Available Prompts
-
-The server comes with several pre-configured prompts:
-
-- **Friendly Greeting**: A warm, personalized greeting
-- **Code Review**: A thorough code review with suggestions
-- **Content Analysis**: Systematic analysis of web content
-- **Explain Concept**: Clear explanation of complex concepts
-
-## Using Built-in Commands
-
-The server supports the following built-in commands:
-
-- **process_slash_command**: Processes slash commands that trigger prompt templates with optional arguments
-  ```
-  /command_name argument1 argument2
-  ```
-
-- **listprompts**: Displays a formatted list of all available commands and their usage
-  ```
-  /listprompts
-  ```
-
-These commands can be used directly through the Claude interface once the MCP server is properly connected.
-
-## Creating Custom Prompts
-
-1. Create a new markdown file in the appropriate category folder (e.g., `prompts/general/my_prompt.md`)
-2. Add the prompt template to the file using markdown format
-3. Register the prompt in `prompts.json` with appropriate metadata
+Once the server is running and configured in the config.json, you can use the custom prompts by simply using "/" to initialize a prompt template.
 
 ## Troubleshooting
 
