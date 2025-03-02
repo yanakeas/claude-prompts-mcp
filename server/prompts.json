@@ -1,0 +1,92 @@
+{
+  "categories": [
+    {
+      "id": "general",
+      "name": "General",
+      "description": "General-purpose prompts for everyday tasks"
+    },
+    {
+      "id": "code",
+      "name": "Code",
+      "description": "Prompts related to programming and software development"
+    },
+    {
+      "id": "analysis",
+      "name": "Analysis",
+      "description": "Prompts for analyzing content and data"
+    },
+    {
+      "id": "education",
+      "name": "Education",
+      "description": "Prompts for learning and teaching concepts"
+    }
+  ],
+  "prompts": [
+    {
+      "id": "friendly_greeting",
+      "name": "Friendly Greeting",
+      "category": "general",
+      "description": "A warm, personalized greeting that makes the user feel welcome and valued.",
+      "file": "prompts/general/friendly_greeting.md",
+      "arguments": [
+        {
+          "name": "name",
+          "description": "The name of the person to greet",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "code_review",
+      "name": "Code Review",
+      "category": "code",
+      "description": "A thorough code review that identifies issues, suggests improvements, and follows best practices.",
+      "file": "prompts/code/code_review.md",
+      "arguments": [
+        {
+          "name": "code",
+          "description": "The code to be reviewed",
+          "required": true
+        },
+        {
+          "name": "language",
+          "description": "The programming language of the code",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "content_analysis",
+      "name": "Content Analysis",
+      "category": "analysis",
+      "description": "Systematically analyze web content, breaking it down into key components.",
+      "file": "prompts/analysis/content_analysis.md",
+      "arguments": [
+        {
+          "name": "content",
+          "description": "The content to be analyzed",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "explain_concept",
+      "name": "Explain Concept",
+      "category": "education",
+      "description": "A clear, comprehensive explanation of complex concepts tailored to the specified knowledge level.",
+      "file": "prompts/education/explain_concept.md",
+      "arguments": [
+        {
+          "name": "concept",
+          "description": "The concept to be explained",
+          "required": true
+        },
+        {
+          "name": "level",
+          "description": "The knowledge level of the audience",
+          "required": true
+        }
+      ]
+    }
+  ]
+}
