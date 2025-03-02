@@ -93,6 +93,16 @@ node dist/index.js --transport=sse
 
 ## Connecting to the Server
 
+### Build the Server First
+
+Before connecting to the server, make sure to build it:
+
+```bash
+npm run build
+```
+
+This will compile the TypeScript code into JavaScript in the `dist` directory.
+
 ### MCP-Bridge Configuration
 
 Add the following to your MCP-Bridge `config.json` file:
@@ -100,7 +110,19 @@ Add the following to your MCP-Bridge `config.json` file:
 ```json
 "mcp_servers": {
   "claude-prompts": {
-    "url": "http://localhost:90901/mcp"
+    "command": "node /path/to/claude-prompts/server/dist/index.js"
+  }
+}
+```
+
+Note: Replace `/path/to/claude-prompts` with the actual path to your project directory.
+
+You can also specify additional arguments like the transport method:
+
+```json
+"mcp_servers": {
+  "claude-prompts": {
+    "command": "node /path/to/claude-prompts/server/dist/index.js --transport=stdio"
   }
 }
 ```
@@ -117,6 +139,22 @@ The server comes with several pre-configured prompts:
 - **Code Review**: A thorough code review with suggestions
 - **Content Analysis**: Systematic analysis of web content
 - **Explain Concept**: Clear explanation of complex concepts
+
+## Using Built-in Commands
+
+The server supports the following built-in commands:
+
+- **process_slash_command**: Processes slash commands that trigger prompt templates with optional arguments
+  ```
+  /command_name argument1 argument2
+  ```
+
+- **listprompts**: Displays a formatted list of all available commands and their usage
+  ```
+  /listprompts
+  ```
+
+These commands can be used directly through the Claude interface once the MCP server is properly connected.
 
 ## Creating Custom Prompts
 
