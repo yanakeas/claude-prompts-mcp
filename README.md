@@ -1,4 +1,4 @@
-# Claude Custom Prompts Server
+# Claude Custom Prompts Server [WIP]
 
 A Node.js server implementing the Model Context Protocol (MCP) for Claude AI models, allowing you to define and use custom prompt templates.
 
@@ -9,6 +9,12 @@ A Node.js server implementing the Model Context Protocol (MCP) for Claude AI mod
 - 🧩 Support for prompt arguments with validation
 - 📚 Organized prompt categories for better management
 - 🔄 Multiple transport options (SSE and STDIO)
+
+## TODO
+
+- [ ] Add functionality to modify the prompt library with different tool commands directly within the MCP client
+- [ ] Add more comprehensive testing
+- [ ] Create a simple web UI for managing prompts
 
 ## Setup
 
