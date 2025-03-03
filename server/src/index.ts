@@ -219,10 +219,28 @@ interface ConvertedPrompt {
     description?: string;
     required: boolean;
   }>;
+  // Chain-related properties
+  isChain?: boolean;                   // Whether this prompt is a chain of prompts
+  chainSteps?: Array<{
+    promptId: string;                  // ID of the prompt to execute in this step
+    stepName: string;                  // Name of this step
+    inputMapping?: Record<string, string>; // Maps chain inputs to this step's inputs
+    outputMapping?: Record<string, string>; // Maps this step's outputs to chain outputs
+  }>;
 }
 
 // Function to load prompt content from markdown file
-async function loadPromptFile(filePath: string): Promise<{ systemMessage?: string; userMessageTemplate: string }> {
+async function loadPromptFile(filePath: string): Promise<{ 
+  systemMessage?: string; 
+  userMessageTemplate: string;
+  isChain?: boolean;
+  chainSteps?: Array<{
+    promptId: string;
+    stepName: string;
+    inputMapping?: Record<string, string>;
+    outputMapping?: Record<string, string>;
+  }>;
+}> {
   try {
     const fullPath = path.join(__dirname, "..", filePath);
     const content = await readFile(fullPath, "utf8");
@@ -234,11 +252,61 @@ async function loadPromptFile(filePath: string): Promise<{ systemMessage?: strin
     const systemMessage = systemMessageMatch ? systemMessageMatch[1].trim() : undefined;
     const userMessageTemplate = userMessageMatch ? userMessageMatch[1].trim() : "";
     
-    if (!userMessageTemplate) {
+    // Extract chain information if present
+    const chainMatch = content.match(/## Chain Steps\s*\n([\s\S]*?)(?=\n##|$)/);
+    let isChain = false;
+    let chainSteps: Array<{
+      promptId: string;
+      stepName: string;
+      inputMapping?: Record<string, string>;
+      outputMapping?: Record<string, string>;
+    }> = [];
+    
+    if (chainMatch) {
+      isChain = true;
+      const chainContent = chainMatch[1].trim();
+      const stepMatches = chainContent.matchAll(/### Step (\d+): (.+)\s*\nPrompt: `([^`]+)`(?:\s*\nInput Mapping:\s*```json\s*([\s\S]*?)```)?(?:\s*\nOutput Mapping:\s*```json\s*([\s\S]*?)```)?/g);
+      
+      for (const match of stepMatches) {
+        const [_, stepNumber, stepName, promptId, inputMappingStr, outputMappingStr] = match;
+        
+        const step: {
+          promptId: string;
+          stepName: string;
+          inputMapping?: Record<string, string>;
+          outputMapping?: Record<string, string>;
+        } = {
+          promptId: promptId.trim(),
+          stepName: stepName.trim(),
+        };
+        
+        if (inputMappingStr) {
+          try {
+            step.inputMapping = JSON.parse(inputMappingStr.trim());
+          } catch (e) {
+            log.warn(`Invalid input mapping JSON in chain step ${stepNumber} of ${filePath}`);
+          }
+        }
+        
+        if (outputMappingStr) {
+          try {
+            step.outputMapping = JSON.parse(outputMappingStr.trim());
+          } catch (e) {
+            log.warn(`Invalid output mapping JSON in chain step ${stepNumber} of ${filePath}`);
+          }
+        }
+        
+        chainSteps.push(step);
+      }
+      
+      log.debug(`Loaded chain with ${chainSteps.length} steps from ${filePath}`);
+    }
+    
+    if (!userMessageTemplate && !isChain) {
       throw new Error(`No user message template found in ${filePath}`);
     }
     
-    return { systemMessage, userMessageTemplate };
+    return { systemMessage, userMessageTemplate, isChain, chainSteps };
   } catch (error) {
     log.error(`Error loading prompt file ${filePath}:`, error);
     throw error;
@@ -268,41 +336,20 @@ async function convertMarkdownPromptsToJson(promptsData: PromptData[]): Promise<
           name: arg.name,
           description: arg.description,
           required: arg.required
-        }))
+        })),
+        // Include chain information if this is a chain
+        isChain: promptFile.isChain || false,
+        chainSteps: promptFile.chainSteps || []
       };
       
-      // Extract placeholders from user template for verification
-      const placeholderRegex = /\{([^}]+)\}/g;
-      const templatePlaceholders = new Set<string>();
-      let match;
-      
-      while ((match = placeholderRegex.exec(promptFile.userMessageTemplate)) !== null) {
-        templatePlaceholders.add(match[1]);
-      }
-      
-      // Verify all required arguments have placeholders
-      for (const arg of promptData.arguments) {
-        if (arg.required && !templatePlaceholders.has(arg.name)) {
-          log.warn(`Prompt '${promptData.name}' (${promptData.id}): Required argument '${arg.name}' does not have a placeholder in the template`);
-        }
-      }
-      
-      // Verify all placeholders have corresponding arguments
-      const argNames = new Set(promptData.arguments.map(arg => arg.name));
-      for (const placeholder of templatePlaceholders) {
-        if (!argNames.has(placeholder)) {
-          log.warn(`Prompt '${promptData.name}' (${promptData.id}): Template contains placeholder '{${placeholder}}' but no corresponding argument is defined`);
-        }
-      }
-      
       convertedPrompts.push(convertedPrompt);
-      log.debug(`Converted prompt: ${promptData.id} (${promptData.name})`);
     } catch (error) {
       log.error(`Error converting prompt ${promptData.id}:`, error);
+      // Continue with other prompts even if one fails
     }
   }
   
-  log.info(`Successfully converted ${convertedPrompts.length} of ${promptsData.length} prompts`);
+  log.info(`Successfully converted ${convertedPrompts.length} prompts`);
   return convertedPrompts;
 }
 
@@ -312,10 +359,519 @@ const server = new McpServer({
   version: config.server.version
 });
 
-// Add a tool to handle slash commands
+// Create a simple conversation history tracker
+const conversationHistory: Array<{
+  role: "user" | "assistant";
+  content: string;
+  timestamp: number;
+  isProcessedTemplate?: boolean; // Flag to indicate if this is a processed template rather than original user input
+}> = [];
+
+// Define maximum history size to prevent memory leaks
+const MAX_HISTORY_SIZE = 100;
+
+// Function to add items to conversation history with size management
+function addToConversationHistory(item: {
+  role: "user" | "assistant";
+  content: string;
+  timestamp: number;
+  isProcessedTemplate?: boolean;
+}) {
+  conversationHistory.push(item);
+  
+  // Trim history if it exceeds maximum size
+  if (conversationHistory.length > MAX_HISTORY_SIZE) {
+    // Remove oldest entries, keeping recent ones
+    conversationHistory.splice(0, conversationHistory.length - MAX_HISTORY_SIZE);
+    log.debug(`Trimmed conversation history to ${MAX_HISTORY_SIZE} entries to prevent memory leaks`);
+  }
+}
+
+// Function to get the previous message from conversation history
+function getPreviousMessage(): string {
+  // Try to find the last user message in conversation history
+  if (conversationHistory.length > 0) {
+    // Start from the end and find the first non-template user message
+    for (let i = conversationHistory.length - 1; i >= 0; i--) {
+      const historyItem = conversationHistory[i];
+      // Only consider user messages that aren't processed templates
+      if (historyItem.role === "user" && !historyItem.isProcessedTemplate) {
+        log.debug(`Found previous user message for context: ${historyItem.content.substring(0, 50)}...`);
+        return historyItem.content;
+      }
+    }
+  }
+  
+  // Return a default prompt if no suitable history item is found
+  return "[Please check previous messages in the conversation for context]";
+}
+
+// Custom error types for better error handling
+class PromptError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PromptError';
+  }
+}
+
+class ArgumentError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ArgumentError';
+  }
+}
+
+class ValidationError extends Error {
+  validationErrors?: string[];
+  
+  constructor(message: string, validationErrors?: string[]) {
+    super(message);
+    this.name = 'ValidationError';
+    this.validationErrors = validationErrors;
+  }
+}
+
+class LlmServiceError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'LlmServiceError';
+  }
+}
+
+// Standardized error handling
+function handleError(error: unknown, context: string): { message: string; isError: boolean } {
+  if (error instanceof PromptError) {
+    log.error(`${context}: ${error.message}`);
+    return { message: error.message, isError: true };
+  } else if (error instanceof ArgumentError) {
+    log.warn(`${context}: ${error.message}`);
+    return { message: error.message, isError: false };
+  } else if (error instanceof ValidationError) {
+    log.warn(`${context}: ${error.message}`);
+    const errors = error.validationErrors ? `: ${error.validationErrors.join(', ')}` : '';
+    return { message: `${error.message}${errors}`, isError: false };
+  } else if (error instanceof LlmServiceError) {
+    log.error(`${context}: ${error.message}`);
+    return { message: `Service error: ${error.message}`, isError: true };
+  } else {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    log.error(`${context}: ${errorMessage}`);
+    return { message: `Unexpected error: ${errorMessage}`, isError: true };
+  }
+}
+
+// Simulates calling the LLM service
+// This is handled internally by the server - no external API calls
+async function callLlmService(messages: Array<{
+  role: "user" | "assistant";
+  content: { type: "text"; text: string };
+}>): Promise<string> {
+  try {
+    log.debug(`Sending ${messages.length} messages to LLM service`);
+    if (messages.length > 0) {
+      const lastMessage = messages[messages.length - 1];
+      log.debug(`Last message: ${JSON.stringify(lastMessage.content)}`);
+    }
+    
+    // Here we'd actually call an LLM service, but this is a simulated response
+    // For demonstration, returning a simple response
+    return "This is a simulated response from the LLM service. The actual implementation will handle LLM interactions internally.";
+  } catch (error) {
+    throw new LlmServiceError(`Failed to call LLM service: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+// Validate JSON arguments against the prompt's expected arguments
+function validateJsonArguments(jsonArgs: any, prompt: PromptData): { valid: boolean; errors?: string[]; sanitizedArgs?: Record<string, any> } {
+  const errors: string[] = [];
+  const sanitizedArgs: Record<string, any> = {};
+  
+  // Check for unexpected properties
+  const expectedArgNames = prompt.arguments.map(arg => arg.name);
+  const providedArgNames = Object.keys(jsonArgs);
+  
+  for (const argName of providedArgNames) {
+    if (!expectedArgNames.includes(argName)) {
+      errors.push(`Unexpected argument: ${argName}`);
+    }
+  }
+  
+  // Check for and sanitize expected arguments
+  for (const arg of prompt.arguments) {
+    const value = jsonArgs[arg.name];
+    
+    // All arguments are treated as optional now
+    if (value !== undefined) {
+      // Sanitize the value based on expected type
+      // This is a simple implementation - expand as needed for your use case
+      if (typeof value === "string") {
+        // Sanitize string inputs
+        sanitizedArgs[arg.name] = value
+          .replace(/[<>]/g, '') // Remove potentially dangerous HTML characters
+          .trim();
+      } else if (typeof value === "number") {
+        // Ensure it's a valid number
+        sanitizedArgs[arg.name] = isNaN(value) ? 0 : value;
+      } else if (typeof value === "boolean") {
+        sanitizedArgs[arg.name] = !!value; // Ensure boolean type
+      } else if (Array.isArray(value)) {
+        // For arrays, sanitize each element if they're strings
+        sanitizedArgs[arg.name] = value.map(item => 
+          typeof item === "string" ? item.replace(/[<>]/g, '').trim() : item
+        );
+      } else if (value !== null && typeof value === "object") {
+        // For objects, convert to string for simplicity
+        sanitizedArgs[arg.name] = JSON.stringify(value);
+      } else {
+        // For any other type, convert to string
+        sanitizedArgs[arg.name] = String(value);
+      }
+    }
+  }
+  
+  return {
+    valid: errors.length === 0,
+    errors: errors.length > 0 ? errors : undefined,
+    sanitizedArgs
+  };
+}
+
+// Helper function to process templates
+function processTemplate(
+  template: string, 
+  args: Record<string, string>, 
+  specialContext: Record<string, string> = {}
+): string {
+  let processed = template;
+  
+  // Process special context placeholders first
+  Object.entries(specialContext).forEach(([key, value]) => {
+    processed = processed.replace(
+      new RegExp(`\\{\\{${key}\\}\\}`, "g"),
+      String(value)
+    );
+  });
+  
+  // Replace regular placeholders with argument values
+  Object.entries(args).forEach(([key, value]) => {
+    if (value !== undefined) {
+      processed = processed.replace(
+        new RegExp(`\\{\\{${key}\\}\\}`, "g"),
+        String(value)
+      );
+    }
+  });
+  
+  return processed;
+}
+
+// Process the prompt with the parsed arguments and optional system message
+async function runPromptDirectly(promptId: string, parsedArgs: Record<string, string>): Promise<string> {
+  try {
+    const convertedPrompt = convertedPrompts.find(cp => cp.id === promptId);
+    if (!convertedPrompt) {
+      throw new PromptError(`Could not find prompt with ID: ${promptId}`);
+    }
+    
+    log.debug(`Running prompt directly: ${promptId} with arguments:`, parsedArgs);
+    
+    // Check for missing arguments but treat all as optional
+    const missingArgs = convertedPrompt.arguments
+      .filter(arg => !parsedArgs[arg.name])
+      .map(arg => arg.name);
+    
+    if (missingArgs.length > 0) {
+      log.info(`Missing arguments for '${promptId}': ${missingArgs.join(", ")}. Will attempt to use conversation context.`);
+      
+      // Use previous_message for all missing arguments
+      missingArgs.forEach(argName => {
+        parsedArgs[argName] = `{{previous_message}}`;
+      });
+    }
+    
+    // Create user message with placeholders replaced
+    let userMessageText = convertedPrompt.userMessageTemplate;
+    
+    // Set up special context values
+    const specialContext = {
+      "previous_message": getPreviousMessage()
+    };
+    
+    // Process the template to replace all placeholders
+    userMessageText = processTemplate(userMessageText, parsedArgs, specialContext);
+    
+    // Add the message to conversation history
+    addToConversationHistory({
+      role: "user",
+      content: userMessageText,
+      timestamp: Date.now(),
+      isProcessedTemplate: true
+    });
+    
+    // Execute the LLM call
+    const llmResponse = await callLlmService([{
+      role: "user",
+      content: {
+        type: "text",
+        text: userMessageText
+      }
+    }]);
+    
+    // Store the response in conversation history
+    addToConversationHistory({
+      role: "assistant",
+      content: llmResponse,
+      timestamp: Date.now()
+    });
+    
+    return llmResponse;
+  } catch (error) {
+    const { message } = handleError(error, `Error executing prompt '${promptId}'`);
+    return message;
+  }
+}
+
+// Execute a chain of prompts
+async function executePromptChain(
+  chainPromptId: string, 
+  inputArgs: Record<string, string> = {}
+): Promise<{
+  results: Record<string, string>;
+  messages: { role: "user" | "assistant"; content: { type: "text"; text: string; }; }[];
+}> {
+  try {
+    // Find the chain prompt
+    const chainPrompt = convertedPrompts.find(cp => cp.id === chainPromptId);
+    
+    if (!chainPrompt) {
+      throw new PromptError(`Could not find chain prompt with ID: ${chainPromptId}`);
+    }
+    
+    // Validate that this is a chain prompt with steps
+    if (!chainPrompt.isChain || !chainPrompt.chainSteps || chainPrompt.chainSteps.length === 0) {
+      throw new ValidationError(`Prompt '${chainPromptId}' is not a valid chain or has no steps.`);
+    }
+    
+    const totalSteps = chainPrompt.chainSteps.length;
+    log.info(`Executing prompt chain: ${chainPrompt.name} (${chainPrompt.id}) with ${totalSteps} steps`);
+    
+    // Store results from each step that can be used as inputs for subsequent steps
+    const results: Record<string, string> = { ...inputArgs };
+    const messages: { role: "user" | "assistant"; content: { type: "text"; text: string; }; }[] = [];
+    
+    // Add chain start message to conversation history
+    addToConversationHistory({
+      role: "system" as any, // Type cast as any since the function expects "user" | "assistant"
+      content: `Starting prompt chain: ${chainPrompt.name} (${totalSteps} steps)`,
+      timestamp: Date.now()
+    });
+    
+    // Execute each step in sequence
+    for (let i = 0; i < chainPrompt.chainSteps.length; i++) {
+      const step = chainPrompt.chainSteps[i];
+      const currentStepNumber = i + 1;
+      
+      log.info(`Executing chain step ${currentStepNumber}/${totalSteps}: ${step.stepName} (${step.promptId})`);
+      
+      // Add step context to the results object so it can be used in templates
+      results['current_step_number'] = String(currentStepNumber);
+      results['total_steps'] = String(totalSteps);
+      results['current_step_name'] = step.stepName;
+      
+      // Prepare arguments for this step based on input mappings
+      const stepArgs: Record<string, string> = {};
+      
+      // Map inputs from results according to input mappings
+      if (step.inputMapping) {
+        for (const [stepInput, resultKey] of Object.entries(step.inputMapping)) {
+          if (results[resultKey] !== undefined) {
+            stepArgs[stepInput] = results[resultKey];
+          } else {
+            log.warn(`Missing input mapping for step '${step.stepName}': ${resultKey} -> ${stepInput}`);
+          }
+        }
+      }
+      
+      // Add step context to the arguments
+      stepArgs['step_number'] = String(currentStepNumber);
+      stepArgs['total_steps'] = String(totalSteps);
+      stepArgs['step_name'] = step.stepName;
+      
+      try {
+        // Add step start message to conversation history
+        addToConversationHistory({
+          role: "system" as any, // Type cast as any since the function expects "user" | "assistant"
+          content: `Executing chain step ${currentStepNumber}/${totalSteps}: ${step.stepName}`,
+          timestamp: Date.now()
+        });
+        
+        // Run the prompt for this step
+        const stepResult = await runPromptDirectly(step.promptId, stepArgs);
+        
+        // Store the result
+        if (step.outputMapping) {
+          for (const [resultKey, stepOutput] of Object.entries(step.outputMapping)) {
+            // For now, we only support mapping the entire output to a result key
+            results[resultKey] = stepResult;
+          }
+        }
+        
+        // Add more detailed step messages to conversation history
+        messages.push({
+          role: "user",
+          content: { 
+            type: "text", 
+            text: `[Chain Step ${currentStepNumber}/${totalSteps}: ${step.stepName} (${step.promptId})]` 
+          }
+        });
+        
+        messages.push({
+          role: "assistant",
+          content: { 
+            type: "text", 
+            text: stepResult 
+          }
+        });
+        
+        // Add step completion message to conversation history
+        addToConversationHistory({
+          role: "system" as any, // Type cast as any since the function expects "user" | "assistant"
+          content: `Completed chain step ${currentStepNumber}/${totalSteps}: ${step.stepName}`,
+          timestamp: Date.now()
+        });
+      } catch (stepError) {
+        const { message, isError } = handleError(stepError, `Error executing chain step '${step.stepName}'`);
+        
+        // Add error message to the results
+        results[`error_${step.promptId}`] = message;
+        
+        // Add error message to conversation history
+        messages.push({
+          role: "user",
+          content: { 
+            type: "text", 
+            text: `[Chain Step ${currentStepNumber}/${totalSteps}: ${step.stepName} (${step.promptId})]` 
+          }
+        });
+        
+        messages.push({
+          role: "assistant",
+          content: { 
+            type: "text", 
+            text: message 
+          }
+        });
+        
+        // If this is a critical error, we may want to stop the chain execution
+        if (isError) {
+          throw new PromptError(`Chain execution stopped due to error in step ${currentStepNumber}/${totalSteps} '${step.stepName}': ${message}`);
+        }
+      }
+    }
+    
+    // Add chain completion message to conversation history
+    addToConversationHistory({
+      role: "system" as any, // Type cast as any since the function expects "user" | "assistant"
+      content: `Completed prompt chain: ${chainPrompt.name} (all ${totalSteps} steps)`,
+      timestamp: Date.now()
+    });
+    
+    log.info(`Chain execution completed successfully: ${chainPrompt.id}`);
+    
+    return {
+      results,
+      messages
+    };
+  } catch (error) {
+    const { message } = handleError(error, `Error executing prompt chain '${chainPromptId}'`);
+    
+    return {
+      results: { error: message },
+      messages: [{
+        role: "assistant",
+        content: { 
+          type: "text", 
+          text: message 
+        }
+      }]
+    };
+  }
+}
+
+// Add global state for tracking current chain execution
+// This needs to be added before the process_slash_command definition
+// Add it right after the conversationHistory definition (around line ~370)
+
+// Chain execution state tracking
+interface ChainExecutionState {
+  chainId: string;
+  currentStepIndex: number;
+  totalSteps: number;
+  stepResults: Record<string, string>;
+  startTime: number;
+}
+
+// Current active chain execution (only one at a time for simplicity)
+let currentChainExecution: ChainExecutionState | null = null;
+
+// Function to start a new chain execution
+function startChainExecution(chainId: string, totalSteps: number, initialArgs: Record<string, string>): ChainExecutionState {
+  const newExecution: ChainExecutionState = {
+    chainId,
+    currentStepIndex: 0, // 0-based index
+    totalSteps,
+    stepResults: { ...initialArgs },
+    startTime: Date.now()
+  };
+  
+  // Store as current execution
+  currentChainExecution = newExecution;
+  
+  log.info(`Started new chain execution for chain '${chainId}' with ${totalSteps} steps`);
+  return newExecution;
+}
+
+// Function to advance to the next step in the chain
+function advanceChainExecution(stepOutput: string): ChainExecutionState | null {
+  if (!currentChainExecution) {
+    log.warn("Attempted to advance chain execution but no chain is currently active");
+    return null;
+  }
+  
+  // Store the output from the current step
+  const stepIndex = currentChainExecution.currentStepIndex;
+  currentChainExecution.stepResults[`step_${stepIndex}_output`] = stepOutput;
+  
+  // Move to the next step
+  currentChainExecution.currentStepIndex++;
+  
+  // Check if we've completed all steps
+  if (currentChainExecution.currentStepIndex >= currentChainExecution.totalSteps) {
+    log.info(`Chain execution for '${currentChainExecution.chainId}' completed all ${currentChainExecution.totalSteps} steps`);
+    
+    // Reset current execution since we're done
+    const completedExecution = currentChainExecution;
+    currentChainExecution = null;
+    
+    return completedExecution;
+  }
+  
+  log.info(`Advanced chain execution for '${currentChainExecution.chainId}' to step ${currentChainExecution.currentStepIndex + 1}/${currentChainExecution.totalSteps}`);
+  return currentChainExecution;
+}
+
+// Function to clear the current chain execution (e.g., in case of errors)
+function clearChainExecution(): void {
+  if (currentChainExecution) {
+    log.info(`Cleared chain execution for '${currentChainExecution.chainId}' after completing ${currentChainExecution.currentStepIndex}/${currentChainExecution.totalSteps} steps`);
+    currentChainExecution = null;
+  }
+}
+
+// Modify the process_slash_command tool to use the validation utility
 server.tool(
   "process_slash_command",
-  "Processes slash commands that trigger prompt templates with optional arguments",
+  "Process slash commands that trigger prompt templates with optional arguments",
   {
     command: z.string().describe("The slash command to process, e.g., '/content_analysis Hello world'")
   },
@@ -323,183 +879,114 @@ server.tool(
     try {
       log.info(`Processing slash command: ${command}`);
       
-      // Check if this is a valid slash command
-      if (!command.startsWith("/")) {
-        return { 
-          content: [{ type: "text", text: "Not a valid slash command. Commands must start with '/'." }]
-        };
+      // Store original user input in conversation history
+      addToConversationHistory({
+        role: "user",
+        content: command,
+        timestamp: Date.now()
+      });
+      
+      // Extract the command name and arguments
+      // Format: /command_name argument_text
+      const match = command.match(/^\/([a-zA-Z0-9_-]+)\s*(.*)/);
+      
+      if (!match) {
+        throw new ValidationError("Invalid slash command format. Use /command_name [arguments]");
       }
       
-      // Extract command name and arguments
-      const spaceIndex = command.indexOf(" ");
-      const commandName = spaceIndex > 0 
-        ? command.substring(1, spaceIndex) 
-        : command.substring(1);
+      const [, commandName, commandArgs] = match;
       
-      // If there are no arguments, handle empty content case
-      const commandArgs = spaceIndex > 0 
-        ? command.substring(spaceIndex + 1).trim() 
-        : "";
-      
-      log.debug(`Command name: ${commandName}, Args: ${commandArgs}`);
-      
-      // Handle the built-in listprompts command
-      if (commandName === "listprompts") {
-        log.info("Executing listprompts command from process_slash_command");
-        
-        // Generate the listprompts content directly
-        let listpromptsText = "# Available Commands\n\n";
-        
-        // Group prompts by category
-        const promptsByCategory: Record<string, ConvertedPrompt[]> = {};
-        
-        // Find the category names for better display
-        const categoryMap: Record<string, string> = {};
-        categories.forEach(cat => {
-          categoryMap[cat.id] = cat.name;
-          promptsByCategory[cat.id] = [];
-        });
-        
-        // Group the prompts
-        convertedPrompts.forEach(prompt => {
-          if (!promptsByCategory[prompt.category]) {
-            promptsByCategory[prompt.category] = [];
-          }
-          promptsByCategory[prompt.category].push(prompt);
-        });
-        
-        // Add each category and its prompts to the listprompts text
-        Object.entries(promptsByCategory).forEach(([categoryId, prompts]) => {
-          if (prompts.length === 0) return;
-          
-          const categoryName = categoryMap[categoryId] || categoryId;
-          listpromptsText += `## ${categoryName}\n\n`;
-          
-          // Add each prompt in this category
-          prompts.forEach(prompt => {
-            listpromptsText += `### /${prompt.id}\n`;
-            if (prompt.name !== prompt.id) {
-              listpromptsText += `*Alias: /${prompt.name}*\n\n`;
-            } else {
-              listpromptsText += "\n";
-            }
-            
-            listpromptsText += `${prompt.description}\n\n`;
-            
-            // Add argument details if any
-            if (prompt.arguments.length > 0) {
-              listpromptsText += "**Arguments:**\n\n";
-              
-              prompt.arguments.forEach(arg => {
-                const required = arg.required ? " (required)" : " (optional)";
-                listpromptsText += `- \`${arg.name}\`${required}: ${arg.description || 'No description'}\n`;
-              });
-              
-              // Add usage examples based on number of arguments
-              listpromptsText += "\n**Usage:**\n\n";
-              
-              if (prompt.arguments.length === 1) {
-                const argName = prompt.arguments[0].name;
-                listpromptsText += `\`/${prompt.id} your ${argName} here\`\n\n`;
-              } else if (prompt.arguments.length > 1) {
-                // For multiple arguments, show JSON format
-                const exampleArgs: Record<string, string> = {};
-                prompt.arguments.forEach(arg => {
-                  exampleArgs[arg.name] = `<your ${arg.name} here>`;
-                });
-                
-                listpromptsText += `\`/${prompt.id} ${JSON.stringify(exampleArgs)}\`\n\n`;
-              }
-            }
-          });
-        });
-        
-        // Add special commands section
-        listpromptsText += "## Special Commands\n\n";
-        listpromptsText += "### /listprompts\n\n";
-        listpromptsText += "Displays this listprompts message listing all available commands and their usage.\n\n";
-        
-        return {
-          content: [{ type: "text", text: listpromptsText }]
-        };
-      }
-      
-      // Look for a matching prompt in our registry
+      // Find the matching prompt
       const matchingPrompt = promptsData.find(
         prompt => prompt.id === commandName || prompt.name === commandName
       );
       
       if (!matchingPrompt) {
-        return { 
-          content: [{ 
-            type: "text", 
-            text: `No prompt found matching command '/${commandName}'. Available commands are: ${promptsData.map(p => p.id).join(", ")}`
-          }]
-        };
+        throw new PromptError(`Unknown command: /${commandName}. Type /listprompts to see available commands.`);
       }
       
-      // Prepare arguments for the prompt
+      // Parse arguments
       const promptArgValues: Record<string, string> = {};
       
-      // Handle the command arguments based on the expected prompt arguments
-      if (matchingPrompt.arguments.length === 1) {
-        // If prompt expects only one argument, use the entire command text as its value
-        promptArgValues[matchingPrompt.arguments[0].name] = commandArgs;
-      } else if (matchingPrompt.arguments.length > 1) {
-        // For multi-argument prompts, attempt to parse structured JSON, or provide guidance
-        try {
+      if (commandArgs) {
+        if (matchingPrompt.arguments.length === 0) {
+          log.warn(`Command '/${commandName}' doesn't accept arguments, but arguments were provided: ${commandArgs}`);
+        } else if (matchingPrompt.arguments.length === 1 && 
+                  (!commandArgs.trim().startsWith("{") || !commandArgs.trim().endsWith("}"))) {
+          // Single argument, not in JSON format, assign directly
+          promptArgValues[matchingPrompt.arguments[0].name] = commandArgs.trim();
+        } else {
           // Try to parse as JSON if it looks like JSON
-          if (commandArgs.trim().startsWith("{") && commandArgs.trim().endsWith("}")) {
-            const parsedArgs = JSON.parse(commandArgs);
-            Object.keys(parsedArgs).forEach(key => {
-              promptArgValues[key] = parsedArgs[key];
-            });
-          } else {
-            // Otherwise treat first argument as content and leave others empty
+          try {
+            if (commandArgs.trim().startsWith("{") && commandArgs.trim().endsWith("}")) {
+              const parsedArgs = JSON.parse(commandArgs);
+              
+              // Validate the parsed JSON against expected arguments
+              const validation = validateJsonArguments(parsedArgs, matchingPrompt);
+              
+              if (!validation.valid && validation.errors) {
+                throw new ValidationError(`Invalid arguments for /${commandName}`, validation.errors);
+              }
+              
+              // Use the sanitized arguments
+              Object.assign(promptArgValues, validation.sanitizedArgs || {});
+            } else if (matchingPrompt.arguments.length === 1) {
+              // Single argument, but not in JSON format
+              promptArgValues[matchingPrompt.arguments[0].name] = commandArgs;
+            } else {
+              // Provide guidance on correct format
+              log.debug(`Multi-argument prompt requested (${matchingPrompt.arguments.length} args). Command arguments not in JSON format.`);
+              throw new ArgumentError(`Invalid argument format for /${commandName}. Multiple arguments should be provided as JSON. Example: /${commandName} {"arg1": "value1", "arg2": "value2"}`);
+            }
+          } catch (e) {
+            if (e instanceof ValidationError || e instanceof ArgumentError) {
+              throw e;
+            }
+            log.debug("Error parsing JSON arguments:", e);
+            // Still assign the first argument if there is content
             if (matchingPrompt.arguments.length > 0 && commandArgs) {
               promptArgValues[matchingPrompt.arguments[0].name] = commandArgs;
             }
-            
-            // Provide guidance on correct format
-            log.debug(`Multi-argument prompt requested (${matchingPrompt.arguments.length} args). Command arguments not in JSON format.`);
-          }
-        } catch (e) {
-          log.debug("Error parsing JSON arguments:", e);
-          // Still assign the first argument if there is content
-          if (matchingPrompt.arguments.length > 0 && commandArgs) {
-            promptArgValues[matchingPrompt.arguments[0].name] = commandArgs;
           }
         }
       }
       
       log.debug("Prepared arguments for prompt:", promptArgValues);
       
-      // Check for missing required arguments
+      // Check for missing arguments but treat all as optional
       const missingArgs = matchingPrompt.arguments
-        .filter(arg => arg.required && !promptArgValues[arg.name])
+        .filter(arg => !promptArgValues[arg.name])
         .map(arg => arg.name);
       
       if (missingArgs.length > 0) {
-        return { 
-          content: [{ 
-            type: "text", 
-            text: `Missing required arguments for '/${commandName}': ${missingArgs.join(", ")}. Please provide values for these arguments.`
-          }]
-        };
+        // Log an info message rather than a warning
+        log.info(`Missing arguments for '/${commandName}': ${missingArgs.join(", ")}. Will attempt to use conversation context.`);
+        
+        // Use previous_message for all missing arguments
+        missingArgs.forEach(argName => {
+          promptArgValues[argName] = `{{previous_message}}`;
+        });
       }
       
       // Find the converted prompt with template data
       const convertedPrompt = convertedPrompts.find(cp => cp.id === matchingPrompt.id);
       
       if (!convertedPrompt) {
-        return {
-          content: [{
-            type: "text",
-            text: `Error: Could not find converted prompt data for ${matchingPrompt.id}`
-          }]
-        };
+        throw new PromptError(`Could not find converted prompt data for ${matchingPrompt.id}`);
       }
       
+      // Check if this is a chain prompt
+      if (convertedPrompt.isChain && convertedPrompt.chainSteps && convertedPrompt.chainSteps.length > 0) {
+        log.info(`Command '/${commandName}' is a chain prompt with ${convertedPrompt.chainSteps.length} steps. NOT automatically executing the chain.`);
+        
+        // No longer automatically execute the entire chain
+        // Instead, we'll process this as a regular prompt
+        // The LLM is expected to make separate calls for each step in the chain
+        
+        // Regular prompt processing continues below
+      }
+      
+      // For all prompts, continue with the original processing
       // Create the prompt handler function similar to the one used for regular prompts
       const messages: { role: "user" | "assistant"; content: { type: "text"; text: string } }[] = [];
       
@@ -511,14 +998,21 @@ server.tool(
         userMessageText = `[System Info: ${convertedPrompt.systemMessage}]\n\n${userMessageText}`;
       }
       
-      // Replace placeholders in message content with argument values
-      Object.entries(promptArgValues).forEach(([key, value]) => {
-        if (value !== undefined) {
-          userMessageText = userMessageText.replace(
-            new RegExp(`\\{${key}\\}`, "g"),
-            String(value)
-          );
-        }
+      // Set up special context values
+      const specialContext = {
+        "previous_message": getPreviousMessage()
+      };
+      
+      // Process the template to replace all placeholders
+      userMessageText = processTemplate(userMessageText, promptArgValues, specialContext);
+      
+      // Store the processed message in history as a user message
+      // This ensures that getPreviousMessage() can find it when needed for the {{previous_message}} placeholder
+      addToConversationHistory({
+        role: "user",  // Use "user" role to ensure it's findable by getPreviousMessage()
+        content: userMessageText,
+        timestamp: Date.now(),
+        isProcessedTemplate: true  // Mark this as a processed template, not original user input
       });
       
       messages.push({
@@ -537,13 +1031,13 @@ server.tool(
         }]
       };
     } catch (error) {
-      log.error("Error processing slash command:", error);
+      const { message, isError } = handleError(error, "Error processing slash command");
       return { 
         content: [{ 
           type: "text", 
-          text: `Error processing slash command: ${error instanceof Error ? error.message : String(error)}` 
+          text: message
         }],
-        isError: true
+        isError
       };
     }
   }
@@ -601,8 +1095,8 @@ server.tool(
             listpromptsText += "**Arguments:**\n\n";
             
             prompt.arguments.forEach(arg => {
-              const required = arg.required ? " (required)" : " (optional)";
-              listpromptsText += `- \`${arg.name}\`${required}: ${arg.description || 'No description'}\n`;
+              // Always show arguments as optional since we're treating them that way
+              listpromptsText += `- \`${arg.name}\` (optional): ${arg.description || 'No description'}\n`;
             });
             
             // Add usage examples based on number of arguments
@@ -655,11 +1149,11 @@ log.info(`Using prompt registration mode: ${registrationMode}`);
 // Register each prompt from the converted JSON structures
 for (const promptData of convertedPrompts) {
   try {
-    // Create a schema for the prompt arguments
+    // Create a schema for the prompt arguments - treat all as optional
     const argsSchema: Record<string, z.ZodType> = {};
     promptData.arguments.forEach(arg => {
-      // All arguments are treated as strings since PromptArgument doesn't have a type property
-      argsSchema[arg.name] = arg.required ? z.string() : z.string().optional();
+      // All arguments are treated as optional strings regardless of required flag
+      argsSchema[arg.name] = z.string().optional();
     });
 
     // Create prompt handler function
@@ -667,6 +1161,32 @@ for (const promptData of convertedPrompts) {
       try {
         log.debug(`Executing prompt '${promptData.name}' with args:`, args);
         
+        // Check for missing arguments but treat all as optional
+        const missingArgs = promptData.arguments
+          .filter(arg => (args[arg.name] === undefined || args[arg.name] === null))
+          .map(arg => arg.name);
+          
+        if (missingArgs.length > 0) {
+          log.info(`Missing arguments for prompt '${promptData.name}': ${missingArgs.join(", ")}. Will attempt to use conversation context.`);
+          
+          // For each missing argument, set it to use the previous message
+          missingArgs.forEach(argName => {
+            args[argName] = `{{previous_message}}`;
+          });
+        }
+        
+        // Check if this is a chain prompt
+        if (promptData.isChain && promptData.chainSteps && promptData.chainSteps.length > 0) {
+          log.info(`Prompt '${promptData.name}' is a chain with ${promptData.chainSteps.length} steps. NOT automatically executing the chain.`);
+          
+          // No longer automatically execute the entire chain
+          // Instead, we'll process this as a regular prompt
+          // The LLM is expected to make separate calls for each step in the chain
+          
+          // Regular prompt processing continues below
+        }
+        
+        // Regular (non-chain) prompt processing continues below
         // Create messages array with only user and assistant roles
         // System messages will be converted to user messages
         const messages: { role: "user" | "assistant"; content: { type: "text"; text: string } }[] = [];
@@ -679,42 +1199,42 @@ for (const promptData of convertedPrompts) {
           userMessageText = `[System Info: ${promptData.systemMessage}]\n\n${userMessageText}`;
         }
         
-        // Replace placeholders in message content with argument values
-        // Check if all required arguments are present
-        const missingArgs: string[] = [];
-        promptData.arguments.forEach(arg => {
-          if (arg.required && (args[arg.name] === undefined || args[arg.name] === null || args[arg.name] === '')) {
-            missingArgs.push(arg.name);
-          }
+        // Process special context placeholders first
+        const specialPlaceholders = {
+          "previous_message": getPreviousMessage()
+        };
+        
+        // Replace special placeholders
+        Object.entries(specialPlaceholders).forEach(([key, value]) => {
+          userMessageText = userMessageText.replace(
+            new RegExp(`\\{\\{${key}\\}\\}`, "g"),
+            String(value)
+          );
         });
         
-        if (missingArgs.length > 0) {
-          log.error(`Missing required arguments for prompt '${promptData.name}': ${missingArgs.join(', ')}`);
-          throw new Error(`Missing required arguments: ${missingArgs.join(', ')}`);
-        }
-        
-        // Check if user template contains placeholders for all required arguments
-        promptData.arguments.forEach(arg => {
-          if (arg.required && !userMessageText.includes(`{${arg.name}}`)) {
-            log.warn(`Template for prompt '${promptData.name}' is missing placeholder for required argument: ${arg.name}`);
-          }
-        });
-        
+        // Replace argument placeholders
         Object.entries(args).forEach(([key, value]) => {
-          if (value !== undefined) {
-            const oldText = userMessageText;
-            userMessageText = userMessageText.replace(
-              new RegExp(`\\{${key}\\}`, "g"),
+          if (value !== undefined && value !== null) {
+            const replaced = userMessageText.replace(
+              new RegExp(`\\{\\{${key}\\}\\}`, "g"),
               String(value)
             );
-            
-            // Check if replacement actually happened
-            if (oldText === userMessageText && promptData.arguments.some(arg => arg.name === key)) {
-              log.warn(`Placeholder {${key}} not found in template for prompt '${promptData.name}'`);
+            if (replaced === userMessageText) {
+              log.warn(`Placeholder for argument '${key}' not found in template for prompt '${promptData.name}'`);
             }
+            userMessageText = replaced;
           }
         });
         
+        // Store in conversation history for future reference
+        addToConversationHistory({
+          role: "user",
+          content: userMessageText,
+          timestamp: Date.now(),
+          isProcessedTemplate: true  // Mark as a processed template, not original user input
+        });
+        
+        // Push the user message to the messages array
         messages.push({
           role: "user",
           content: {
@@ -745,7 +1265,6 @@ for (const promptData of convertedPrompts) {
         log.debug(`Could not register display name, might conflict with another identifier: ${promptData.name}`);
       }
     }
-    
   } catch (error) {
     log.error(`Error registering prompt ${promptData.id}:`, error);
   }

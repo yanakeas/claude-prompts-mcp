@@ -19,6 +19,11 @@
       "id": "education",
       "name": "Education",
       "description": "Prompts for learning and teaching concepts"
+    },
+    {
+      "id": "development",
+      "name": "Development",
+      "description": "Prompts for software development and code quality"
     }
   ],
   "prompts": [
@@ -32,7 +37,7 @@
         {
           "name": "name",
           "description": "The name of the person to greet",
-          "required": true
+          "required": false
         }
       ]
     },
@@ -46,12 +51,12 @@
         {
           "name": "code",
           "description": "The code to be reviewed",
-          "required": true
+          "required": false
         },
         {
           "name": "language",
           "description": "The programming language of the code",
-          "required": true
+          "required": false
         }
       ]
     },
@@ -65,9 +70,17 @@
         {
           "name": "content",
           "description": "The content to be analyzed",
-          "required": true
+          "required": false
         }
       ]
+    },
+    {
+      "id": "deep_analysis",
+      "name": "Deep Analysis",
+      "category": "analysis",
+      "description": "Expand on a previous analysis by diving deeper into information, identifying key insights and relationships.",
+      "file": "prompts/analysis/deep_analysis.md",
+      "arguments": []
     },
     {
       "id": "explain_concept",
@@ -79,12 +92,202 @@
         {
           "name": "concept",
           "description": "The concept to be explained",
-          "required": true
+          "required": false
         },
         {
           "name": "level",
           "description": "The knowledge level of the audience",
-          "required": true
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "markdown_notebook",
+      "name": "Markdown Notebook Creator",
+      "category": "education",
+      "description": "Develop a comprehensive markdown document for a specific topic, designed for note-taking and in-depth exploration.",
+      "file": "prompts/education/markdown_notebook.md",
+      "arguments": [
+        {
+          "name": "notebook_topic",
+          "description": "The topic to create a notebook about",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "progressive_research",
+      "name": "Progressive Research Assistant",
+      "category": "analysis",
+      "description": "A step-by-step research assistant that builds knowledge incrementally through iterative questions and analysis.",
+      "file": "prompts/analysis/progressive_research.md",
+      "arguments": [
+        {
+          "name": "notes",
+          "description": "The initial notes or information to research and expand on",
+          "required": false
+        },
+        {
+          "name": "information",
+          "description": "Additional context or information to guide the research",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "note_refinement",
+      "name": "Note Refinement",
+      "category": "analysis",
+      "description": "Refine existing notes by improving organization, flow, and clarity without adding or modifying the content.",
+      "file": "prompts/analysis/note_refinement.md",
+      "arguments": [
+        {
+          "name": "notes",
+          "description": "The notes to be refined and reorganized",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "video_study_guide",
+      "name": "Video Study Guide Creator",
+      "category": "education",
+      "description": "Create a comprehensive, structured study guide for educational videos that helps viewers follow along and retain information more effectively.",
+      "file": "prompts/education/video_study_guide.md",
+      "arguments": [
+        {
+          "name": "video_title",
+          "description": "The title of the video",
+          "required": false
+        },
+        {
+          "name": "transcript",
+          "description": "The transcript of the video content",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "note_integration",
+      "name": "Note Integration",
+      "category": "analysis",
+      "description": "Integrate new information from a markdown page into existing notes, merging them smoothly while maintaining a logical structure and avoiding duplication.",
+      "file": "prompts/analysis/note_integration.md",
+      "arguments": [
+        {
+          "name": "notes",
+          "description": "The existing notes",
+          "required": false
+        },
+        {
+          "name": "new_information",
+          "description": "The new information to be integrated",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "code_review_chain",
+      "name": "Code Review Chain",
+      "category": "development",
+      "description": "A multi-step chain that reviews code by analyzing its structure, identifying potential issues, and suggesting improvements.",
+      "file": "prompts/development/code_review_chain.md",
+      "arguments": [
+        {
+          "name": "code",
+          "description": "The code to be reviewed",
+          "required": false
+        },
+        {
+          "name": "language",
+          "description": "The programming language of the code",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "analyze_code_structure",
+      "name": "Analyze Code Structure",
+      "category": "development",
+      "description": "Analyzes the structure and patterns of provided code.",
+      "file": "prompts/development/analyze_code_structure.md",
+      "arguments": [
+        {
+          "name": "code",
+          "description": "The code to analyze",
+          "required": false
+        },
+        {
+          "name": "language",
+          "description": "The programming language of the code",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "detect_code_issues",
+      "name": "Detect Code Issues",
+      "category": "development",
+      "description": "Identifies potential bugs, performance issues, and code smells in the provided code.",
+      "file": "prompts/development/detect_code_issues.md",
+      "arguments": [
+        {
+          "name": "code",
+          "description": "The code to analyze",
+          "required": false
+        },
+        {
+          "name": "analysis",
+          "description": "Previous code structure analysis",
+          "required": false
+        },
+        {
+          "name": "language",
+          "description": "The programming language of the code",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "suggest_code_improvements",
+      "name": "Suggest Code Improvements",
+      "category": "development",
+      "description": "Suggests specific improvements to address identified issues and enhance code quality.",
+      "file": "prompts/development/suggest_code_improvements.md",
+      "arguments": [
+        {
+          "name": "code",
+          "description": "The code to improve",
+          "required": false
+        },
+        {
+          "name": "analysis",
+          "description": "Previous code structure analysis",
+          "required": false
+        },
+        {
+          "name": "issues",
+          "description": "Identified issues in the code",
+          "required": false
+        },
+        {
+          "name": "language",
+          "description": "The programming language of the code",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "content_analysis_chain",
+      "name": "Content Analysis Chain",
+      "category": "analysis",
+      "description": "A comprehensive analysis chain that processes content through multiple stages: initial content analysis, deep analysis, conversion to a structured markdown notebook, and final refinement.",
+      "file": "prompts/analysis/content_analysis_chain.md",
+      "arguments": [
+        {
+          "name": "content",
+          "description": "The content to be processed through the analysis chain",
+          "required": false
         }
       ]
     }

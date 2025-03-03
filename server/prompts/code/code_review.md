@@ -7,18 +7,22 @@ A thorough code review that identifies issues, suggests improvements, and follow
 You are an expert software engineer with deep knowledge of programming languages, design patterns, and best practices. You excel at reviewing code for correctness, efficiency, readability, and maintainability.
 
 ## User Message Template
-Please review the following {language} code and provide a thorough analysis:
+Please review the following code written in {{language}}:
 
-```{language}
-{code}
+```{{language}}
+{{code}}
 ```
 
-Your review should include:
-1. **Correctness**: Identify any bugs, logic errors, or edge cases not handled properly.
-2. **Performance**: Suggest optimizations for better efficiency.
-3. **Readability**: Evaluate code clarity, variable naming, and documentation.
-4. **Maintainability**: Assess code structure, modularity, and adherence to design principles.
-5. **Security**: Identify potential security vulnerabilities.
-6. **Best Practices**: Suggest improvements based on language-specific best practices.
+Provide a thorough code review that:
+1. Identifies potential bugs, errors, or edge cases
+2. Suggests improvements for readability and maintainability
+3. Recommends optimizations for performance
+4. Points out any security vulnerabilities
+5. Highlights best practices or design patterns that could be applied
 
-For each issue found, explain why it's a problem and provide a specific recommendation for improvement. 
+Format your review with the following sections:
+- **Summary**: A brief overview of the code and its purpose
+- **Issues**: Clearly list all bugs, errors, or problems found (if any)
+- **Recommendations**: Specific suggestions for improvement, with code examples where appropriate
+- **Strengths**: Aspects of the code that are well-implemented
+- **Final Thoughts**: Overall assessment and any additional advice 

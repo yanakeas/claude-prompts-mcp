@@ -10,7 +10,7 @@ You are a content analysis expert who specializes in breaking down and analyzing
 Please analyze the following content systematically:
 
 ```
-{content}
+{{content}}
 ```
 
 Break down your analysis into these components:

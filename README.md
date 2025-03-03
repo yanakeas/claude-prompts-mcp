@@ -9,12 +9,14 @@ A Node.js server implementing the Model Context Protocol (MCP) for Claude AI mod
 - 🧩 Support for prompt arguments with validation
 - 📚 Organized prompt categories for better management
 - 🔄 Multiple transport options (SSE and STDIO)
+- 🔄 Special context placeholders for accessing conversation history
 
 ## TODO
 
 - [ ] Add functionality to modify the prompt library with different tool commands directly within the MCP client
 - [ ] Add more comprehensive testing
 - [ ] Create a simple web UI for managing prompts
+- [ ] Import my entire Prompt Library
 
 ## Setup
 
@@ -122,6 +124,32 @@ This file defines the custom prompt templates available through the server. Each
 1. Create a new markdown file in the appropriate category folder (e.g., `prompts/general/my_prompt.md`)
 2. Add the prompt template to the file using markdown format
 3. Register the prompt in `prompts.json` with appropriate metadata
+
+### Special Placeholders
+
+The server supports special placeholders that can be used in your prompt templates:
+
+- `{{previous_message}}` - Inserts a prompt asking Claude to reference the previous message in its context
+  - This leverages Claude's built-in conversation memory rather than trying to track messages server-side
+  - The actual message content is never accessed by the server, only by Claude
+
+These placeholders are useful for creating prompts that build on previous context without requiring the user to copy and paste content.
+
+### Example Template
+
+```markdown
+# Example Prompt with Context
+
+## Description
+A prompt that builds on previous conversation context.
+
+## User Message Template
+Based on this previous message:
+{{previous_message}}
+
+Please provide additional insights on the topic.
+```
+
 ___
 
 ### Claude config.json Configuration
