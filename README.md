@@ -83,7 +83,7 @@ The server relies heavily on the working directory to locate and load files. Und
 - When running the server directly, the working directory is the directory from which you run the command
 - When using Claude Desktop, the working directory is set by the `cwd` parameter in the configuration
 - Always use absolute paths for the `cwd` parameter to avoid confusion
-- On Windows, use forward slashes (`/`) in the path, not backslashes (`\`)
+- On Windows, use backslashes (`\\`) in the path to follow Windows conventions, making sure to escape them properly in JSON files (double backslashes)
 
 ### Common Working Directory Issues
 
@@ -298,8 +298,12 @@ To add the MCP server to your Claude Desktop, follow these steps:
 ```json
 "mcp_servers": {
   "claude-prompts": {
-    "command": "node dist/index.js",
-    "cwd": "C:/path/to/claude-prompts/server",
+    "command": "node",
+    "args": [
+      "C:\\path\\to\\claude-prompts\\server\\dist\\index.js",
+      "--transport=stdio"
+    ],
+    "cwd": "C:\\path\\to\\claude-prompts\\server",
     "env": {
       "PORT": "9090"
     },
@@ -309,25 +313,27 @@ To add the MCP server to your Claude Desktop, follow these steps:
 ```
 
 Notes:
-- Replace `C:/path/to/claude-prompts/server` with the absolute path to your server directory
-- Use forward slashes (`/`) even on Windows for the paths
+- Replace `C:\\path\\to\\claude-prompts\\server` with the absolute path to your server directory
+- For Windows paths, use double backslashes (`\\`) to properly escape them in JSON
 - The `cwd` parameter is critical as it sets the working directory for the server
 - Without the correct `cwd`, the server won't be able to find prompt files, config files, or log files
 - All file paths in the server code are resolved relative to this working directory
 - Set `autostart` to `true` to have the server start automatically when Claude Desktop launches
 - You can specify environment variables like `PORT` in the `env` object
 
-3. You can also specify the transport method:
+3. You can also specify the transport method by adding it to the args array:
 
 ```json
 "mcp_servers": {
   "claude-prompts": {
-    "command": "node dist/index.js --transport=stdio",
-    "cwd": "C:/path/to/claude-prompts/server",
+    "command": "node",
+    "args": [
+      "C:\\path\\to\\claude-prompts\\server\\dist\\index.js",
+      "--transport=stdio"
+    ],
     "env": {
       "PORT": "9090"
     },
-    "autostart": true
   }
 }
 ```
@@ -372,6 +378,7 @@ For chain prompts:
 - The server logs its working directory at startup - verify it matches your expectations
 - All file paths in the server are resolved relative to the working directory
 - Use absolute paths in the `cwd` parameter to avoid confusion
+- Windows paths should use double backslashes (`\\`) in JSON configuration files to properly escape the backslash character
 
 ### Checking Server Status
 
@@ -396,7 +403,7 @@ For chain prompts:
 
 ### Checking Logs
 
-- On Windows, check the log file at `C:\path\to\claude-prompts\server\server.log`
+- On Windows, check the log file at `C:\\path\\to\\claude-prompts\\server\\server.log`
 - On macOS, check the log file at `/path/to/claude-prompts/server/server.log`
 - The log file contains detailed information about server initialization, prompt loading, and any errors
 
