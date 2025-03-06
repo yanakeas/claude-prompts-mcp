@@ -126,8 +126,28 @@ function listTextReferences(): Array<{ id: string; title: string; createdAt: num
   }));
 }
 
+// Get the available tools as a formatted string
+function getAvailableTools(): string {
+  // This is a placeholder implementation. In a real implementation, 
+  // you would dynamically fetch available tools from the MCP server.
+  // For now, we'll return a static instruction about tools usage.
+  return `You have access to a set of tools to help solve tasks. 
+Use the following format to utilize these tools:
+
+<tool_calls>
+<tool_call name="TOOL_NAME">
+<tool_parameters>
+PARAMETERS_IN_JSON_FORMAT
+</tool_parameters>
+</tool_call>
+</tool_calls>
+
+Always check if a tool is appropriate for the task at hand before using it.
+Use tools only when necessary to complete the task.`;
+}
+
 // Text reference system functions
-async function processTemplateAsync(template: string, args: Record<string, string>, specialContext: Record<string, string> = {}): Promise<string> {
+async function processTemplateAsync(template: string, args: Record<string, string>, specialContext: Record<string, string> = {}, toolsEnabled: boolean = false): Promise<string> {
   // First, store any long text arguments as references
   const processedArgs = { ...args };
   for (const [key, value] of Object.entries(processedArgs)) {
@@ -136,8 +156,14 @@ async function processTemplateAsync(template: string, args: Record<string, strin
     }
   }
 
+  // Add tools_available to specialContext if tools are enabled
+  const enhancedSpecialContext = { ...specialContext };
+  if (toolsEnabled) {
+    enhancedSpecialContext['tools_available'] = getAvailableTools();
+  }
+
   // Process the template with the modified arguments
-  let processedTemplate = originalProcessTemplate(template, processedArgs, specialContext);
+  let processedTemplate = originalProcessTemplate(template, processedArgs, enhancedSpecialContext);
 
   // Replace any reference placeholders with their content
   processedTemplate = processedTemplate.replace(/{{ref:([^}]+)}}/g, (match, refId) => {
@@ -149,9 +175,15 @@ async function processTemplateAsync(template: string, args: Record<string, strin
 }
 
 // Synchronous version that doesn't handle long text references
-function processTemplate(template: string, args: Record<string, string>, specialContext: Record<string, string> = {}): string {
+function processTemplate(template: string, args: Record<string, string>, specialContext: Record<string, string> = {}, toolsEnabled: boolean = false): string {
+  // Add tools_available to specialContext if tools are enabled
+  const enhancedSpecialContext = { ...specialContext };
+  if (toolsEnabled) {
+    enhancedSpecialContext['tools_available'] = getAvailableTools();
+  }
+
   // Process the template with the arguments directly
-  let processedTemplate = originalProcessTemplate(template, args, specialContext);
+  let processedTemplate = originalProcessTemplate(template, args, enhancedSpecialContext);
 
   // Replace any reference placeholders with their content
   processedTemplate = processedTemplate.replace(/{{ref:([^}]+)}}/g, (match, refId) => {
@@ -374,6 +406,7 @@ interface ConvertedPrompt {
     inputMapping?: Record<string, string>; // Maps chain inputs to this step's inputs
     outputMapping?: Record<string, string>; // Maps this step's outputs to chain outputs
   }>;
+  tools?: boolean;                     // Whether this prompt should use available tools
 }
 
 // Function to load prompt content from markdown file
@@ -505,7 +538,8 @@ async function convertMarkdownPromptsToJson(promptsData: PromptData[]): Promise<
         })),
         // Include chain information if this is a chain
         isChain: promptFile.isChain || false,
-        chainSteps: promptFile.chainSteps || []
+        chainSteps: promptFile.chainSteps || [],
+        tools: promptData.tools || false
       };
       
       convertedPrompts.push(convertedPrompt);
@@ -609,8 +643,8 @@ async function runPromptDirectly(promptId: string, parsedArgs: Record<string, st
       "previous_message": getPreviousMessage()
     };
     
-    // Process the template to replace all placeholders
-    userMessageText = await processTemplateAsync(userMessageText, parsedArgs, specialContext);
+    // Process the template to replace all placeholders, passing the tools flag
+    userMessageText = await processTemplateAsync(userMessageText, parsedArgs, specialContext, convertedPrompt.tools || false);
     
     // Add the message to conversation history
     addToConversationHistory({
@@ -990,7 +1024,7 @@ server.tool(
       };
       
       // Process the template to replace all placeholders
-      userMessageText = await processTemplateAsync(userMessageText, promptArgValues, specialContext);
+      userMessageText = await processTemplateAsync(userMessageText, promptArgValues, specialContext, convertedPrompt.tools || false);
       
       // Store the processed message in history as a user message
       // This ensures that getPreviousMessage() can find it when needed for the {{previous_message}} placeholder
@@ -1169,16 +1203,38 @@ server.tool(
       
       // Check if the category exists
       const categoryExists = promptsFile.categories.some(cat => cat.id === args.category);
+      let effectiveCategory = args.category; // Define this variable outside the if block
+      
+      // If the category doesn't exist, create it
       if (!categoryExists) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Category '${args.category}' does not exist. Please create the category first or use an existing category.`
-            }
-          ],
-          isError: true
-        };
+        log.info(`Category '${args.category}' does not exist. Creating it automatically.`);
+        
+        // Generate a clean category ID
+        const categoryId = args.category.toLowerCase().replace(/\s+/g, "-");
+        const categoryName = args.category; // Use original name for display
+        const categoryDescription = `Prompts related to ${args.category}`;
+        
+        // Add the new category to the prompts file
+        promptsFile.categories.push({ 
+          id: categoryId, 
+          name: categoryName, 
+          description: categoryDescription 
+        });
+        
+        // Create the category directory
+        const categoryDirPath = path.join(__dirname, "..", "prompts", categoryId);
+        try {
+          await fs.mkdir(categoryDirPath, { recursive: true });
+          log.info(`Created directory for new category: ${categoryDirPath}`);
+        } catch (error) {
+          log.error(`Error creating directory ${categoryDirPath}:`, error);
+          // Continue even if directory creation fails
+        }
+        
+        // Update the effective category to use the cleaned ID
+        const originalCategory = args.category;
+        effectiveCategory = categoryId;
+        log.info(`Created new category: '${originalCategory}' with ID: '${categoryId}'`);
       }
       
       // Check if the prompt already exists
@@ -1186,11 +1242,11 @@ server.tool(
       const promptExists = existingPromptIndex !== -1;
       
       // Determine the file path for the prompt
-      const promptFilePath = `prompts/${args.category}/${args.id}.md`;
+      const promptFilePath = `prompts/${effectiveCategory}/${args.id}.md`;
       const fullPromptFilePath = path.join(__dirname, "..", promptFilePath);
       
       // Create the prompt directory if it doesn't exist
-      const promptDirPath = path.join(__dirname, "..", "prompts", args.category);
+      const promptDirPath = path.join(__dirname, "..", "prompts", effectiveCategory);
       try {
         await fs.mkdir(promptDirPath, { recursive: true });
       } catch (error) {
@@ -1271,7 +1327,7 @@ server.tool(
       const promptEntry: PromptData = {
         id: args.id,
         name: args.name,
-        category: args.category,
+        category: effectiveCategory,
         description: args.description,
         file: promptFilePath,
         arguments: args.arguments
@@ -2074,126 +2130,144 @@ if (transport === "stdio") {
       
       // Implement the update_prompt functionality directly
       try {
-        const { 
-          id, 
-          name, 
-          category, 
-          description = "", 
-          systemMessage, 
-          userMessageTemplate, 
-          arguments: promptArgs = [], 
-          isChain = false, 
-          chainSteps 
-        } = req.body;
+        const { id, name, category, description, userMessageTemplate, arguments: promptArgs, systemMessage, isChain, chainSteps } = req.body;
         
-        // Read the current prompts.json file
-        const PROMPTS_FILE = path.join(__dirname, "..", config.prompts.file);
-        const fileContent = await readFile(PROMPTS_FILE, "utf8");
-        const promptsFile = JSON.parse(fileContent) as PromptsFile;
-        
-        // Check if the category exists
-        const categoryExists = promptsFile.categories.some(cat => cat.id === category);
-        if (!categoryExists) {
-          return res.status(400).json({ 
-            error: `Category '${category}' does not exist. Please create the category first or use an existing category.` 
-          });
-        }
-        
-        // Check if the prompt already exists
-        const promptIndex = promptsFile.prompts.findIndex(p => p.id === id);
-        const isNewPrompt = promptIndex === -1;
-        
-        // Create the prompt directory if it doesn't exist
-        const promptsDir = path.join(__dirname, "..", "prompts", category);
         try {
+          // Read the prompts.json file to check for existing categories
+          const PROMPTS_FILE = path.join(__dirname, "..", config.prompts.file);
+          const promptsFile = JSON.parse(await readFile(PROMPTS_FILE, "utf8"));
+          const categoryExists = promptsFile.categories.some((cat: { id: string }) => cat.id === category);
+          let effectiveCategory = category; // Define this variable outside the if block
+          
+          // If the category doesn't exist, create it
+          if (!categoryExists) {
+            log.info(`Category '${category}' does not exist. Creating it automatically.`);
+            
+            // Generate a clean category ID
+            const categoryId = category.toLowerCase().replace(/\s+/g, "-");
+            const categoryName = category; // Use original name for display
+            const categoryDescription = `Prompts related to ${category}`;
+            
+            // Add the new category to the prompts file
+            promptsFile.categories.push({ 
+              id: categoryId, 
+              name: categoryName, 
+              description: categoryDescription 
+            });
+            
+            // Create the category directory
+            const categoryDirPath = path.join(__dirname, "..", "prompts", categoryId);
+            try {
+              await fs.mkdir(categoryDirPath, { recursive: true });
+              log.info(`Created directory for new category: ${categoryDirPath}`);
+            } catch (error) {
+              log.error(`Error creating directory ${categoryDirPath}:`, error);
+              // Continue even if directory creation fails
+            }
+            
+            // Update the effective category to use the cleaned ID
+            effectiveCategory = categoryId;
+            log.info(`Created new category: '${category}' with ID: '${categoryId}'`);
+          }
+          
+          // Create the directory structure
+          const promptsDir = path.join(__dirname, "..", "prompts", effectiveCategory);
           await fs.mkdir(promptsDir, { recursive: true });
-        } catch (error) {
-          log.error(`Error creating directory ${promptsDir}:`, error);
-          // Continue even if directory creation fails
-        }
-        
-        // Construct the prompt file content
-        let promptFileContent = `# ${name}\n\n`;
-        promptFileContent += `${description}\n\n`;
-        
-        if (systemMessage) {
-          promptFileContent += `## System Message\n\n${systemMessage}\n\n`;
-        }
-        
-        promptFileContent += `## User Message Template\n\n${userMessageTemplate}\n\n`;
-        
-        if (isChain && chainSteps && chainSteps.length > 0) {
-          promptFileContent += `\n## Chain Steps\n\n`;
           
-          const totalSteps = chainSteps.length;
-          chainSteps.forEach((step: any, index: number) => {
-            promptFileContent += `${index + 1}. promptId: ${step.promptId}\n`;
-            promptFileContent += `   stepName: ${step.stepName} (Step ${index + 1} of ${totalSteps})\n`;
+          // Create the prompt data object
+          const promptData = {
+            id,
+            name,
+            category: effectiveCategory,
+            description,
+            file: `prompts/${effectiveCategory}/${id}.md`,
+            arguments: promptArgs || []
+          };
+          
+          // Check if the prompt already exists
+          const existingPromptIndex = promptsFile.prompts.findIndex((p: { id: string }) => p.id === id);
+          const promptExists = existingPromptIndex !== -1;
+          
+          // Construct the prompt file content
+          let promptFileContent = `# ${name}\n\n`;
+          promptFileContent += `${description}\n\n`;
+          
+          if (systemMessage) {
+            promptFileContent += `## System Message\n\n${systemMessage}\n\n`;
+          }
+          
+          promptFileContent += `## User Message Template\n\n${userMessageTemplate}\n\n`;
+          
+          if (isChain && chainSteps && chainSteps.length > 0) {
+            promptFileContent += `\n## Chain Steps\n\n`;
             
-            if (step.inputMapping) {
-              promptFileContent += `   inputMapping:\n`;
-              for (const [key, value] of Object.entries(step.inputMapping)) {
-                promptFileContent += `     ${key}: ${value}\n`;
+            const totalSteps = chainSteps.length;
+            chainSteps.forEach((step: any, index: number) => {
+              promptFileContent += `${index + 1}. promptId: ${step.promptId}\n`;
+              promptFileContent += `   stepName: ${step.stepName} (Step ${index + 1} of ${totalSteps})\n`;
+              
+              if (step.inputMapping) {
+                promptFileContent += `   inputMapping:\n`;
+                for (const [key, value] of Object.entries(step.inputMapping)) {
+                  promptFileContent += `     ${key}: ${value}\n`;
+                }
               }
-            }
-            
-            if (step.outputMapping) {
-              promptFileContent += `   outputMapping:\n`;
-              for (const [key, value] of Object.entries(step.outputMapping)) {
-                promptFileContent += `     ${key}: ${value}\n`;
+              
+              if (step.outputMapping) {
+                promptFileContent += `   outputMapping:\n`;
+                for (const [key, value] of Object.entries(step.outputMapping)) {
+                  promptFileContent += `     ${key}: ${value}\n`;
+                }
               }
-            }
+              
+              promptFileContent += `\n`;
+            });
             
-            promptFileContent += `\n`;
+            // Add Output Format section for chain prompts
+            promptFileContent += `## Output Format\n\n`;
+            promptFileContent += `After completing all ${totalSteps} steps in the chain, you will have a final output that:\n\n`;
+            promptFileContent += `1. Is well-organized and clearly structured\n`;
+            promptFileContent += `2. Represents the culmination of the entire chain process\n\n`;
+            promptFileContent += `The final output will be the result of the last step in the chain.\n`;
+          }
+          
+          // Write the prompt file
+          const promptFilePath = path.join(promptsDir, `${id}.md`);
+          await writeFile(promptFilePath, promptFileContent, "utf8");
+          
+          // Create or update the prompt entry in prompts.json
+          if (promptExists) {
+            promptsFile.prompts[existingPromptIndex] = promptData;
+          } else {
+            promptsFile.prompts.push(promptData);
+          }
+          
+          // Write the updated prompts.json file
+          await writeFile(PROMPTS_FILE, JSON.stringify(promptsFile, null, 2), "utf8");
+          
+          // Reload prompts and categories
+          try {
+            const result = await reloadPrompts();
+            log.info(`Reloaded ${promptsData.length} prompts and ${categories.length} categories after updating prompt: ${id}`);
+          } catch (error) {
+            log.error("Error reloading prompts data:", error);
+            // Continue even if reload fails
+          }
+          
+          // Return success response
+          return res.status(200).json({ 
+            success: true, 
+            message: `Prompt '${name}' ${promptExists ? 'updated' : 'created'} successfully` 
           });
-          
-          // Add Output Format section for chain prompts
-          promptFileContent += `## Output Format\n\n`;
-          promptFileContent += `After completing all ${totalSteps} steps in the chain, you will have a final output that:\n\n`;
-          promptFileContent += `1. Is well-organized and clearly structured\n`;
-          promptFileContent += `2. Represents the culmination of the entire chain process\n\n`;
-          promptFileContent += `The final output will be the result of the last step in the chain.\n`;
+        } catch (toolError) {
+          return res.status(400).json({ error: toolError instanceof Error ? toolError.message : String(toolError) });
         }
-        
-        // Write the prompt file
-        const promptFilePath = path.join(promptsDir, `${id}.md`);
-        await writeFile(promptFilePath, promptFileContent, "utf8");
-        
-        // Create or update the prompt entry in prompts.json
-        const promptData: PromptData = {
-          id,
-          name,
-          category,
-          description,
-          file: `prompts/${category}/${id}.md`,
-          arguments: promptArgs
-        };
-        
-        if (isNewPrompt) {
-          promptsFile.prompts.push(promptData);
-        } else {
-          promptsFile.prompts[promptIndex] = promptData;
-        }
-        
-        // Write the updated prompts.json file
-        await writeFile(PROMPTS_FILE, JSON.stringify(promptsFile, null, 2), "utf8");
-        
-        // Reload prompts and categories
-        try {
-          const result = await reloadPrompts();
-          log.info(`Reloaded ${promptsData.length} prompts and ${categories.length} categories after updating prompt: ${id}`);
-        } catch (error) {
-          log.error("Error reloading prompts data:", error);
-          // Continue even if reload fails
-        }
-        
-        // Return success response
-        return res.status(200).json({ 
-          success: true, 
-          message: `Prompt '${name}' ${isNewPrompt ? 'created' : 'updated'} successfully` 
+      } catch (error) {
+        log.error("Error handling update_prompt API request:", error);
+        return res.status(500).json({ 
+          error: "Internal server error", 
+          details: error instanceof Error ? error.message : String(error) 
         });
-      } catch (toolError) {
-        return res.status(400).json({ error: toolError instanceof Error ? toolError.message : String(toolError) });
       }
     } catch (error) {
       log.error("Error handling update_prompt API request:", error);

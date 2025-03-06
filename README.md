@@ -64,6 +64,33 @@ npm run start:stdio # Start with STDIO transport
 node dist/index.js --transport=sse
 ```
 
+## Working Directory Considerations
+
+The server relies heavily on the working directory to locate and load files. Understanding how this works is crucial for proper configuration:
+
+### How the Server Uses Working Directory
+
+- The server uses `process.cwd()` to determine its working directory
+- All file paths in the code are constructed relative to this directory using `path.join(__dirname, "..", ...)`
+- Key files that must be accessible from the working directory:
+  - `config.json` - Server configuration
+  - `prompts.json` - Prompt definitions
+  - `prompts/` directory - Contains all prompt template files
+  - `server.log` - Log file (created automatically)
+
+### Setting the Working Directory
+
+- When running the server directly, the working directory is the directory from which you run the command
+- When using Claude Desktop, the working directory is set by the `cwd` parameter in the configuration
+- Always use absolute paths for the `cwd` parameter to avoid confusion
+- On Windows, use forward slashes (`/`) in the path, not backslashes (`\`)
+
+### Common Working Directory Issues
+
+- If the server can't find configuration files or prompt files, the working directory is likely incorrect
+- The server logs its working directory at startup - check this to verify it's what you expect
+- If using relative paths, be aware that they're relative to the working directory, not the script location
+
 ## Using Built-in Commands
 
 The server supports the following built-in commands:
@@ -197,6 +224,65 @@ Each step in the chain specifies:
 
 The chain executes each step in sequence, with outputs from earlier steps available as inputs to later steps.
 
+### How Chain Prompts Work
+
+1. When a chain prompt is executed, the server:
+   - Processes the initial user message template with the provided arguments
+   - Executes each step in sequence, passing inputs and collecting outputs
+   - Maps variables between steps according to the input/output mappings
+   - Returns the final result to Claude
+
+2. Input and output mappings use a simple key-value format:
+   - `prompt_input: chain_input` means "pass the chain's input named 'chain_input' to the prompt's input named 'prompt_input'"
+   - `prompt_output: chain_variable` means "store the prompt's output named 'prompt_output' in the chain variable named 'chain_variable'"
+
+3. Chain variables persist throughout the execution of the chain and can be used by any subsequent step
+
+### Debugging Chain Prompts
+
+If your chain prompt isn't working as expected:
+
+1. Check that all prompt IDs in the chain steps exist in your prompts.json file
+2. Verify that the input and output mappings match the expected inputs and outputs of each prompt
+3. Test each individual prompt in the chain to ensure it works correctly on its own
+4. Look for error messages in the server logs related to chain execution
+5. Try running the chain with simple inputs to isolate any issues
+
+### Example Chain Prompt
+
+Here's a simple example of a chain prompt that generates random facts and then summarizes them:
+
+```markdown
+# Test Chain
+
+## Description
+A test chain that generates random facts and then summarizes them.
+
+## User Message Template
+Generate {{count}} random facts about {{topic}} and then summarize them.
+
+## Chain Steps
+
+1. promptId: generate_facts
+   stepName: Step 1: Generate Random Facts
+   inputMapping:
+     count: count
+     topic: topic
+   outputMapping:
+     facts: generated_facts
+
+2. promptId: create_summary
+   stepName: Step 2: Create Summary
+   inputMapping:
+     content: generated_facts
+     format: "bullet points"
+   outputMapping:
+     summary: final_summary
+
+## Output Format
+The chain will return a summary of random facts in bullet point format.
+```
+
 ___
 
 ### Claude Desktop Configuration
@@ -204,15 +290,16 @@ ___
 To add the MCP server to your Claude Desktop, follow these steps:
 
 1. Locate your Claude Desktop configuration file:
-   - Windows: `%APPDATA%\claude-desktop\config.json` (Typically `C:\Users\YourUsername\AppData\Roaming\claude-desktop\config.json`)
-   - macOS: `~/Library/Application Support/claude-desktop/config.json`
+   - Windows: `%APPDATA%\Claude\claude_desktop_config.json` (Typically `C:\Users\YourUsername\AppData\Roaming\Claude\claude_desktop_config.json`)
+   - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
 
-2. Add the following to your `config.json` file:
+2. Add the following to your `claude_desktop_config.json` file:
 
 ```json
 "mcp_servers": {
   "claude-prompts": {
-    "command": "node C:/path/to/claude-prompts/server/dist/index.js",
+    "command": "node dist/index.js",
+    "cwd": "C:/path/to/claude-prompts/server",
     "env": {
       "PORT": "9090"
     },
@@ -222,8 +309,11 @@ To add the MCP server to your Claude Desktop, follow these steps:
 ```
 
 Notes:
-- Replace `C:/path/to/claude-prompts` with the actual path to your project directory
-- Use forward slashes (`\\` on windows) for the paths
+- Replace `C:/path/to/claude-prompts/server` with the absolute path to your server directory
+- Use forward slashes (`/`) even on Windows for the paths
+- The `cwd` parameter is critical as it sets the working directory for the server
+- Without the correct `cwd`, the server won't be able to find prompt files, config files, or log files
+- All file paths in the server code are resolved relative to this working directory
 - Set `autostart` to `true` to have the server start automatically when Claude Desktop launches
 - You can specify environment variables like `PORT` in the `env` object
 
@@ -232,7 +322,11 @@ Notes:
 ```json
 "mcp_servers": {
   "claude-prompts": {
-    "command": "node C:/path/to/claude-prompts/server/dist/index.js --transport=stdio",
+    "command": "node dist/index.js --transport=stdio",
+    "cwd": "C:/path/to/claude-prompts/server",
+    "env": {
+      "PORT": "9090"
+    },
     "autostart": true
   }
 }
@@ -263,13 +357,48 @@ For chain prompts:
 
 - Ensure the server is running on the expected port
 - Check that the paths in your Claude Desktop config.json are correct
-- Verify that the `prompts.json` file exists and is valid JSON
+- Verify that the `cwd` parameter points to the correct server directory
+- Make sure the `prompts.json` file exists and is valid JSON
 
 ### JSON Parsing Errors
 
 - Check the format of your JSON files
 - Ensure all JSON files are properly formatted with no trailing commas
 - Validate your JSON using a JSON validator
+
+### File Path Issues
+
+- If you see errors about files not being found, check your `cwd` parameter
+- The server logs its working directory at startup - verify it matches your expectations
+- All file paths in the server are resolved relative to the working directory
+- Use absolute paths in the `cwd` parameter to avoid confusion
+
+### Checking Server Status
+
+- The server logs its status to the console and to a log file (`server.log` in the server directory)
+- If using Claude Desktop, check the Claude Desktop logs for server startup messages
+- You can manually run the server to see if it starts correctly:
+  ```bash
+  cd path/to/claude-prompts/server
+  node dist/index.js
+  ```
+- Look for messages like "Server initialized successfully" and "All prompts loaded successfully"
+- If you see error messages, they can help identify the specific issue
+
+### Verifying Node.js Installation
+
+- Ensure Node.js is installed and accessible:
+  ```bash
+  node --version
+  npm --version
+  ```
+- Both commands should return version numbers without errors
+
+### Checking Logs
+
+- On Windows, check the log file at `C:\path\to\claude-prompts\server\server.log`
+- On macOS, check the log file at `/path/to/claude-prompts/server/server.log`
+- The log file contains detailed information about server initialization, prompt loading, and any errors
 
 ## Contributing
 

@@ -159,6 +159,8 @@ export interface PromptData {
   file: string;
   /** Arguments accepted by this prompt */
   arguments: PromptArgument[];
+  /** Whether this prompt should use available tools */
+  tools?: boolean;
 }
 
 /**
@@ -183,4 +185,6 @@ export interface PromptFile {
   systemMessage?: string;
   /** Template for generating the user message */
   userMessageTemplate: string;
+  /** Whether this prompt should use available tools */
+  tools?: boolean;
 }

@@ -49,6 +49,11 @@
       "id": "Research",
       "name": "Research",
       "description": "Prompts related to research and information gathering"
+    },
+    {
+      "id": "obsidian",
+      "name": "Obsidian",
+      "description": "Prompts related to Obsidian"
     }
   ],
   "prompts": [
@@ -419,7 +424,7 @@
       "name": "Deep Research Chain",
       "category": "research-tools",
       "description": "A comprehensive multi-step research process that explores a topic in depth, identifies key insights, and synthesizes findings into a structured report.",
-      "file": "prompts/research-tools/deep-research.md",
+      "file": "prompts/research-tools/deep_research_chain.md",
       "arguments": [
         {
           "name": "topic",
@@ -429,12 +434,12 @@
         {
           "name": "depth",
           "description": "Research depth (basic, intermediate, advanced, expert)",
-          "required": true
+          "required": false
         },
         {
           "name": "format",
           "description": "Output format (report, outline, summary, analysis)",
-          "required": true
+          "required": false
         }
       ],
       "isChain": true,
@@ -772,6 +777,40 @@
           "name": "context",
           "description": "Additional context information",
           "required": false
+        }
+      ]
+    },
+    {
+      "id": "vault_note_placement",
+      "name": "Smart Vault Note Placement",
+      "category": "obsidian",
+      "description": "Find an appropriate existing folder in the user's Obsidian vault and place a note there.",
+      "file": "prompts/obsidian/vault_note_placement.md",
+      "arguments": [
+        {
+          "name": "topic",
+          "description": "The main topic or subject of the note",
+          "required": true
+        },
+        {
+          "name": "content",
+          "description": "The content of the note to be placed in the vault",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "tool_assistant",
+      "name": "Tool-Assisted Helper",
+      "category": "general",
+      "description": "An assistant that can use available tools to help with tasks.",
+      "file": "prompts/general/tool_assistant.md",
+      "tools": true,
+      "arguments": [
+        {
+          "name": "task",
+          "description": "The task that needs assistance",
+          "required": true
         }
       ]
     }
