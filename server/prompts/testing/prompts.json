@@ -1,0 +1,94 @@
+{
+  "prompts": [
+    {
+      "id": "test_chain",
+      "name": "Test Chain",
+      "category": "testing",
+      "description": "A test chain prompt with random information for testing purposes",
+      "file": "test_chain.md",
+      "arguments": [
+        {
+          "name": "topic",
+          "description": "The main topic for this test",
+          "required": true
+        },
+        {
+          "name": "context",
+          "description": "Additional context information",
+          "required": false
+        }
+      ],
+      "isChain": true,
+      "chainSteps": [
+        {
+          "promptId": "generate_random_facts",
+          "stepName": "Step 1: Generate Random Facts (Step 1 of 2)",
+          "inputMapping": {
+            "topic": "topic"
+          },
+          "outputMapping": {
+            "facts": "random_facts"
+          }
+        },
+        {
+          "promptId": "create_test_summary",
+          "stepName": "Step 2: Create Test Summary (Step 2 of 2)",
+          "inputMapping": {
+            "facts": "random_facts",
+            "context": "context"
+          },
+          "outputMapping": {
+            "summary": "final_summary"
+          }
+        }
+      ]
+    },
+    {
+      "id": "generate_random_facts",
+      "name": "Generate Random Facts",
+      "category": "testing",
+      "description": "Generates random facts about a given topic for testing purposes",
+      "file": "generate_random_facts.md",
+      "arguments": [
+        {
+          "name": "topic",
+          "description": "The topic to generate random facts about",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "prompt_reload_test",
+      "name": "Prompt Reload Test",
+      "category": "testing",
+      "description": "A simple prompt to test if the prompt system is reloading correctly.",
+      "file": "prompt_reload_test.md",
+      "arguments": [
+        {
+          "name": "testParam",
+          "description": "Optional test parameter",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "create_test_summary",
+      "name": "Create Test Summary",
+      "category": "testing",
+      "description": "Creates a summary of random facts with additional context for testing purposes",
+      "file": "create_test_summary.md",
+      "arguments": [
+        {
+          "name": "facts",
+          "description": "The random facts to summarize",
+          "required": true
+        },
+        {
+          "name": "context",
+          "description": "Additional context information",
+          "required": false
+        }
+      ]
+    }
+  ]
+} 

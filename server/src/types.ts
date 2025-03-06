@@ -188,3 +188,13 @@ export interface PromptFile {
   /** Whether this prompt should use available tools */
   tools?: boolean;
 }
+
+/**
+ * Configuration for the prompts subsystem with category imports
+ */
+export interface PromptsConfigFile {
+  /** Available categories for organizing prompts */
+  categories: Category[];
+  /** Paths to prompts.json files to import from category folders */
+  imports: string[];
+}

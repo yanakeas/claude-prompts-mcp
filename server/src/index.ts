@@ -12,6 +12,7 @@ import {
   TransportConfig,
   PromptData,
   PromptsFile,
+  PromptsConfigFile,
   Message,
   Category
 } from "./types.js";
@@ -369,17 +370,14 @@ let promptsData: PromptData[] = [];
 let categories: Category[] = [];
 
 try {
-  const fileContent = await readFile(PROMPTS_FILE, "utf8");
+  // Load prompts from category-specific files
+  const result = await loadCategoryPrompts(PROMPTS_FILE);
   
-  try {
-    const promptsFile = JSON.parse(fileContent) as PromptsFile;
-    promptsData = promptsFile.prompts;
-    categories = promptsFile.categories || [];
-    log.info(`Loaded ${promptsData.length} prompts and ${categories.length} categories from ${PROMPTS_FILE}`);
-  } catch (parseError) {
-    log.error(`Error parsing prompts file:`, parseError);
-    process.exit(1);
-  }
+  // Update the global variables
+  promptsData = result.promptsData;
+  categories = result.categories;
+  
+  log.info(`Loaded ${promptsData.length} prompts and ${categories.length} categories from ${PROMPTS_FILE}`);
 } catch (error) {
   log.error(`Error loading prompts from ${PROMPTS_FILE}:`, error);
   process.exit(1);
@@ -1722,13 +1720,12 @@ async function reloadPrompts(): Promise<{ promptsData: PromptData[]; convertedPr
   try {
     log.info(`Reloading prompts from ${PROMPTS_FILE}...`);
     
-    // Re-read the prompts file
-    const fileContent = await readFile(PROMPTS_FILE, "utf8");
-    const promptsFile = JSON.parse(fileContent) as PromptsFile;
+    // Load prompts from category-specific files
+    const result = await loadCategoryPrompts(PROMPTS_FILE);
     
     // Update the global variables
-    promptsData = promptsFile.prompts;
-    categories = promptsFile.categories || [];
+    promptsData = result.promptsData;
+    categories = result.categories;
     
     // Re-convert markdown prompts to JSON
     const newConvertedPrompts = await convertMarkdownPromptsToJson(promptsData);
@@ -2642,3 +2639,71 @@ process.on('uncaughtException', (error) => {
 process.on('unhandledRejection', (reason, promise) => {
   log.error('Unhandled Rejection at:', promise, 'reason:', reason);
 });
+
+// Function to load prompts from category-specific prompts.json files
+async function loadCategoryPrompts(configPath: string): Promise<{ promptsData: PromptData[]; categories: Category[] }> {
+  try {
+    // Read the promptsConfig.json file
+    const configContent = await readFile(configPath, "utf8");
+    const promptsConfig = JSON.parse(configContent) as PromptsConfigFile;
+    
+    // Get the categories from the config
+    const categories = promptsConfig.categories || [];
+    
+    // Initialize an array to store all prompts
+    let allPrompts: PromptData[] = [];
+    
+    // Load prompts from each import path
+    for (const importPath of promptsConfig.imports) {
+      try {
+        // Construct the full path to the import file
+        const fullImportPath = path.join(__dirname, "..", importPath);
+        
+        // Check if the file exists
+        try {
+          await fs.access(fullImportPath);
+        } catch (error) {
+          log.warn(`Import file not found: ${importPath}. Creating empty file.`);
+          
+          // Create the directory if it doesn't exist
+          const dir = path.dirname(fullImportPath);
+          await fs.mkdir(dir, { recursive: true });
+          
+          // Create an empty prompts file
+          await writeFile(fullImportPath, JSON.stringify({ prompts: [] }, null, 2), "utf8");
+        }
+        
+        // Read the file
+        const fileContent = await readFile(fullImportPath, "utf8");
+        const categoryPromptsFile = JSON.parse(fileContent);
+        
+        if (categoryPromptsFile.prompts && Array.isArray(categoryPromptsFile.prompts)) {
+          // Update the file path to be relative to the category folder
+          const categoryPath = path.dirname(importPath);
+          const categoryPrompts = categoryPromptsFile.prompts.map((prompt: PromptData) => {
+            // If the file path is already absolute or starts with the category folder, keep it as is
+            if (prompt.file.startsWith('/') || prompt.file.startsWith(categoryPath)) {
+              return prompt;
+            }
+            
+            // Otherwise, update the file path to include the category folder
+            return {
+              ...prompt,
+              file: path.join(categoryPath, prompt.file)
+            };
+          });
+          
+          // Add the prompts to the array
+          allPrompts = [...allPrompts, ...categoryPrompts];
+        }
+      } catch (error) {
+        log.error(`Error loading prompts from ${importPath}:`, error);
+      }
+    }
+    
+    return { promptsData: allPrompts, categories };
+  } catch (error) {
+    log.error(`Error loading category prompts:`, error);
+    throw error;
+  }
+}

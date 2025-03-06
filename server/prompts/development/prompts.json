@@ -1,0 +1,134 @@
+{
+  "prompts": [
+    {
+      "id": "code_review_chain",
+      "name": "Code Review Chain",
+      "category": "development",
+      "description": "A multi-step chain that reviews code by analyzing its structure, identifying potential issues, and suggesting improvements.",
+      "file": "code_review_chain.md",
+      "arguments": [
+        {
+          "name": "code",
+          "description": "The code to be reviewed",
+          "required": false
+        },
+        {
+          "name": "language",
+          "description": "The programming language of the code",
+          "required": false
+        }
+      ],
+      "isChain": true,
+      "chainSteps": [
+        {
+          "promptId": "analyze_code_structure",
+          "stepName": "Code Analysis (Step 1 of 3)",
+          "inputMapping": {
+            "code": "code",
+            "language": "language"
+          },
+          "outputMapping": {
+            "analysis": "analysis"
+          }
+        },
+        {
+          "promptId": "detect_code_issues",
+          "stepName": "Issue Detection (Step 2 of 3)",
+          "inputMapping": {
+            "code": "code",
+            "analysis": "analysis",
+            "language": "language"
+          },
+          "outputMapping": {
+            "issues": "issues"
+          }
+        },
+        {
+          "promptId": "suggest_code_improvements",
+          "stepName": "Improvement Suggestions (Step 3 of 3)",
+          "inputMapping": {
+            "code": "code",
+            "analysis": "analysis",
+            "issues": "issues",
+            "language": "language"
+          },
+          "outputMapping": {
+            "improvements": "improvements"
+          }
+        }
+      ]
+    },
+    {
+      "id": "analyze_code_structure",
+      "name": "Analyze Code Structure",
+      "category": "development",
+      "description": "Analyzes the structure and patterns of provided code.",
+      "file": "analyze_code_structure.md",
+      "arguments": [
+        {
+          "name": "code",
+          "description": "The code to analyze",
+          "required": false
+        },
+        {
+          "name": "language",
+          "description": "The programming language of the code",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "detect_code_issues",
+      "name": "Detect Code Issues",
+      "category": "development",
+      "description": "Identifies potential bugs, performance issues, and code smells in the provided code.",
+      "file": "detect_code_issues.md",
+      "arguments": [
+        {
+          "name": "code",
+          "description": "The code to analyze",
+          "required": false
+        },
+        {
+          "name": "analysis",
+          "description": "Previous code structure analysis",
+          "required": false
+        },
+        {
+          "name": "language",
+          "description": "The programming language of the code",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "suggest_code_improvements",
+      "name": "Suggest Code Improvements",
+      "category": "development",
+      "description": "Suggests specific improvements to address identified issues and enhance code quality.",
+      "file": "suggest_code_improvements.md",
+      "arguments": [
+        {
+          "name": "code",
+          "description": "The code to improve",
+          "required": false
+        },
+        {
+          "name": "analysis",
+          "description": "Previous code structure analysis",
+          "required": false
+        },
+        {
+          "name": "issues",
+          "description": "Identified issues in the code",
+          "required": false
+        },
+        {
+          "name": "language",
+          "description": "The programming language of the code",
+          "required": false
+        }
+      ]
+    }
+  ]
+} 
