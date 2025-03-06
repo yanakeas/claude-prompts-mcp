@@ -10,6 +10,7 @@ A Node.js server implementing the Model Context Protocol (MCP) for Claude AI mod
 - 📚 Organized prompt categories for better management
 - 🔄 Multiple transport options (SSE and STDIO)
 - 🔄 Special context placeholders for accessing conversation history
+- ⛓️ Support for prompt chains to break complex tasks into steps
 
 ## TODO
 
@@ -93,7 +94,7 @@ The server uses two main configuration files:
   "server": {
     "name": "Claude Custom Prompts",
     "version": "1.0.0",
-    "port": 90901
+    "port": 9090
   },
   "prompts": {
     "file": "prompts.json",
@@ -150,41 +151,118 @@ Based on this previous message:
 Please provide additional insights on the topic.
 ```
 
+## Prompt Chains
+
+Prompt chains allow you to define and execute a sequence of prompts, with each prompt in the chain using the results from previous prompts. This is useful for breaking down complex tasks into smaller, more manageable steps.
+
+### Creating a Chain Prompt
+
+To create a chain prompt, add a markdown file with the following structure:
+
+```markdown
+# My Chain Prompt
+
+## Description
+Description of what this chain does.
+
+## User Message Template
+Initial message template with {{variables}}.
+
+## Chain Steps
+
+1. promptId: first_prompt_id
+   stepName: Step 1: Description of first step
+   inputMapping:
+     prompt_input: chain_input
+   outputMapping:
+     prompt_output: chain_variable
+
+2. promptId: second_prompt_id
+   stepName: Step 2: Description of second step
+   inputMapping:
+     input1: chain_input
+     input2: chain_variable
+   outputMapping:
+     output: final_result
+
+## Output Format
+Description of the expected final output format.
+```
+
+Each step in the chain specifies:
+- The prompt ID to execute
+- A descriptive name for the step
+- Input mapping (how chain inputs map to prompt inputs)
+- Output mapping (how prompt outputs map to chain variables)
+
+The chain executes each step in sequence, with outputs from earlier steps available as inputs to later steps.
+
 ___
 
-### Claude config.json Configuration
+### Claude Desktop Configuration
 
-Add the following to your claude_desktop or alternative, `config.json` file:
+To add the MCP server to your Claude Desktop, follow these steps:
 
-```json
-"mcp_servers": {
-  "claude-prompts": {
-    "command": "node /path/to/claude-prompts/server/dist/index.js"
-  }
-}
-```
+1. Locate your Claude Desktop configuration file:
+   - Windows: `%APPDATA%\claude-desktop\config.json` (Typically `C:\Users\YourUsername\AppData\Roaming\claude-desktop\config.json`)
+   - macOS: `~/Library/Application Support/claude-desktop/config.json`
 
-Note: Replace `/path/to/claude-prompts` with the actual path to your project directory.
-
-You can also specify additional arguments like the transport method:
+2. Add the following to your `config.json` file:
 
 ```json
 "mcp_servers": {
   "claude-prompts": {
-    "command": "node /path/to/claude-prompts/server/dist/index.js --transport=stdio"
+    "command": "node C:/path/to/claude-prompts/server/dist/index.js",
+    "env": {
+      "PORT": "9090"
+    },
+    "autostart": true
   }
 }
 ```
 
-### Using in Cursor or Claude UI
-Once the server is running and configured in the config.json, you can use the custom prompts by simply using "/" to initialize a prompt template.
+Notes:
+- Replace `C:/path/to/claude-prompts` with the actual path to your project directory
+- Use forward slashes (`\\` on windows) for the paths
+- Set `autostart` to `true` to have the server start automatically when Claude Desktop launches
+- You can specify environment variables like `PORT` in the `env` object
+
+3. You can also specify the transport method:
+
+```json
+"mcp_servers": {
+  "claude-prompts": {
+    "command": "node C:/path/to/claude-prompts/server/dist/index.js --transport=stdio",
+    "autostart": true
+  }
+}
+```
+
+4. After saving the configuration, restart Claude Desktop to apply the changes.
+
+### Using in Claude Desktop
+
+Once the server is running and configured, you can use your custom prompts in Claude Desktop by typing:
+
+- `>>command_name argument1 argument2` - For regular prompts
+- `>>chain_command_name argument1 argument2` - For chain prompts
+
+Example:
+```
+>>friendly_greeting name=John
+```
+
+For chain prompts:
+```
+>>content_analysis_chain text="Your content here" focus="clarity"
+```
 
 ## Troubleshooting
 
 ### Connection Issues
 
 - Ensure the server is running on the expected port
-- Check that MCP-Bridge is configured correctly
+- Check that the paths in your Claude Desktop config.json are correct
 - Verify that the `prompts.json` file exists and is valid JSON
 
 ### JSON Parsing Errors
