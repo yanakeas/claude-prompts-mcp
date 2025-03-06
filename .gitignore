@@ -32,3 +32,11 @@ yarn-error.log*
 # Operating System Files
 .DS_Store
 Thumbs.db 
+
+# Test directories
+test/
+test-output/
+tests/
+
+# Admin UI (temporary)
+admin-ui/ 

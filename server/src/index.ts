@@ -15,6 +15,153 @@ import {
   Message,
   Category
 } from "./types.js";
+import { 
+  PromptError, 
+  ArgumentError, 
+  ValidationError, 
+  handleError as utilsHandleError 
+} from './utils/errorHandling.js';
+import {
+  validateJsonArguments,
+  processTemplate as originalProcessTemplate
+} from './utils/jsonUtils.js';
+import * as fs from "fs/promises";
+
+// Text Reference System
+interface TextReference {
+  id: string;
+  title: string;
+  content: string;
+  createdAt: number;
+  lastUsed: number;
+}
+
+interface TextReferenceStore {
+  references: TextReference[];
+  maxAge: number; // Maximum age in milliseconds before cleanup
+  maxSize: number; // Maximum number of references to store
+}
+
+// Initialize text reference storage
+const textReferenceStore: TextReferenceStore = {
+  references: [],
+  maxAge: 24 * 60 * 60 * 1000, // 24 hours
+  maxSize: 1000 // Store up to 1000 references
+};
+
+// Function to generate a title for a text using Claude
+async function generateTextTitle(text: string): Promise<string> {
+  try {
+    const titlePrompt = {
+      id: "generate_title",
+      name: "Generate Title",
+      category: "system",
+      description: "Generate a concise, descriptive title for a text",
+      systemMessage: "Generate a concise, descriptive title (max 50 characters) that captures the essence of the provided text.",
+      userMessageTemplate: "Text to generate title for:\n\n{{text}}",
+      arguments: [{ name: "text", description: "Text to generate title for", required: true }]
+    };
+
+    const result = await runPromptDirectly(titlePrompt.id, { text });
+    return result.trim();
+  } catch (error) {
+    log.error("Error generating title:", error);
+    return `Text_${Date.now()}`;
+  }
+}
+
+// Function to store a text reference
+async function storeTextReference(text: string): Promise<string> {
+  try {
+    const title = await generateTextTitle(text);
+    const id = `ref_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    const reference: TextReference = {
+      id,
+      title,
+      content: text,
+      createdAt: Date.now(),
+      lastUsed: Date.now()
+    };
+
+    textReferenceStore.references.push(reference);
+    
+    // Clean up old references if we exceed maxSize
+    if (textReferenceStore.references.length > textReferenceStore.maxSize) {
+      cleanupOldReferences();
+    }
+
+    return `{{ref:${id}}}`;
+  } catch (error) {
+    log.error("Error storing text reference:", error);
+    throw new Error(`Failed to store text reference: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+// Function to retrieve a text reference
+function getTextReference(refId: string): string | null {
+  const reference = textReferenceStore.references.find(ref => ref.id === refId);
+  if (reference) {
+    reference.lastUsed = Date.now();
+    return reference.content;
+  }
+  return null;
+}
+
+// Function to clean up old references
+function cleanupOldReferences() {
+  const now = Date.now();
+  textReferenceStore.references = textReferenceStore.references
+    .filter(ref => (now - ref.lastUsed) < textReferenceStore.maxAge)
+    .sort((a, b) => b.lastUsed - a.lastUsed)
+    .slice(0, textReferenceStore.maxSize);
+}
+
+// Function to list available references
+function listTextReferences(): Array<{ id: string; title: string; createdAt: number }> {
+  return textReferenceStore.references.map(ref => ({
+    id: ref.id,
+    title: ref.title,
+    createdAt: ref.createdAt
+  }));
+}
+
+// Text reference system functions
+async function processTemplateAsync(template: string, args: Record<string, string>, specialContext: Record<string, string> = {}): Promise<string> {
+  // First, store any long text arguments as references
+  const processedArgs = { ...args };
+  for (const [key, value] of Object.entries(processedArgs)) {
+    if (value && value.length > 500) { // Store texts longer than 500 characters as references
+      processedArgs[key] = await storeTextReference(value);
+    }
+  }
+
+  // Process the template with the modified arguments
+  let processedTemplate = originalProcessTemplate(template, processedArgs, specialContext);
+
+  // Replace any reference placeholders with their content
+  processedTemplate = processedTemplate.replace(/{{ref:([^}]+)}}/g, (match, refId) => {
+    const content = getTextReference(refId);
+    return content || match; // Keep the reference placeholder if content not found
+  });
+
+  return processedTemplate;
+}
+
+// Synchronous version that doesn't handle long text references
+function processTemplate(template: string, args: Record<string, string>, specialContext: Record<string, string> = {}): string {
+  // Process the template with the arguments directly
+  let processedTemplate = originalProcessTemplate(template, args, specialContext);
+
+  // Replace any reference placeholders with their content
+  processedTemplate = processedTemplate.replace(/{{ref:([^}]+)}}/g, (match, refId) => {
+    const content = getTextReference(refId);
+    return content || match; // Keep the reference placeholder if content not found
+  });
+
+  return processedTemplate;
+}
+
 /**
  * ========================================
  * TABLE OF CONTENTS
@@ -175,7 +322,7 @@ log.info(`Loaded configuration from ${CONFIG_FILE}`);
 
 // Use configuration values
 const PROMPTS_FILE = path.join(__dirname, "..", config.prompts.file);
-const PORT = config.server.port;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : config.server.port;
 
 log.debug("Configuration:", JSON.stringify(config, null, 2));
 
@@ -265,10 +412,11 @@ async function loadPromptFile(filePath: string): Promise<{
     if (chainMatch) {
       isChain = true;
       const chainContent = chainMatch[1].trim();
-      const stepMatches = chainContent.matchAll(/### Step (\d+): (.+)\s*\nPrompt: `([^`]+)`(?:\s*\nInput Mapping:\s*```json\s*([\s\S]*?)```)?(?:\s*\nOutput Mapping:\s*```json\s*([\s\S]*?)```)?/g);
+      // Updated regex to match the current markdown format
+      const stepMatches = chainContent.matchAll(/(\d+)\.\s*promptId:\s*([^\n]+)\s*\n\s*stepName:\s*([^\n]+)(?:\s*\n\s*inputMapping:\s*([\s\S]*?)(?=\s*\n\s*(?:outputMapping|promptId|\d+\.|$)))?\s*(?:\n\s*outputMapping:\s*([\s\S]*?)(?=\s*\n\s*(?:promptId|\d+\.|$)))?\s*/g);
       
       for (const match of stepMatches) {
-        const [_, stepNumber, stepName, promptId, inputMappingStr, outputMappingStr] = match;
+        const [_, stepNumber, promptId, stepName, inputMappingStr, outputMappingStr] = match;
         
         const step: {
           promptId: string;
@@ -282,17 +430,35 @@ async function loadPromptFile(filePath: string): Promise<{
         
         if (inputMappingStr) {
           try {
-            step.inputMapping = JSON.parse(inputMappingStr.trim());
+            // Parse YAML-style mapping into JSON object
+            const inputMapping: Record<string, string> = {};
+            const lines = inputMappingStr.trim().split('\n');
+            for (const line of lines) {
+              const [key, value] = line.trim().split(':').map(s => s.trim());
+              if (key && value) {
+                inputMapping[key] = value;
+              }
+            }
+            step.inputMapping = inputMapping;
           } catch (e) {
-            log.warn(`Invalid input mapping JSON in chain step ${stepNumber} of ${filePath}`);
+            log.warn(`Invalid input mapping in chain step ${stepNumber} of ${filePath}: ${e}`);
           }
         }
         
         if (outputMappingStr) {
           try {
-            step.outputMapping = JSON.parse(outputMappingStr.trim());
+            // Parse YAML-style mapping into JSON object
+            const outputMapping: Record<string, string> = {};
+            const lines = outputMappingStr.trim().split('\n');
+            for (const line of lines) {
+              const [key, value] = line.trim().split(':').map(s => s.trim());
+              if (key && value) {
+                outputMapping[key] = value;
+              }
+            }
+            step.outputMapping = outputMapping;
           } catch (e) {
-            log.warn(`Invalid output mapping JSON in chain step ${stepNumber} of ${filePath}`);
+            log.warn(`Invalid output mapping in chain step ${stepNumber} of ${filePath}: ${e}`);
           }
         }
         
@@ -406,163 +572,9 @@ function getPreviousMessage(): string {
   return "[Please check previous messages in the conversation for context]";
 }
 
-// Custom error types for better error handling
-class PromptError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'PromptError';
-  }
-}
-
-class ArgumentError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'ArgumentError';
-  }
-}
-
-class ValidationError extends Error {
-  validationErrors?: string[];
-  
-  constructor(message: string, validationErrors?: string[]) {
-    super(message);
-    this.name = 'ValidationError';
-    this.validationErrors = validationErrors;
-  }
-}
-
-class LlmServiceError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'LlmServiceError';
-  }
-}
-
 // Standardized error handling
 function handleError(error: unknown, context: string): { message: string; isError: boolean } {
-  if (error instanceof PromptError) {
-    log.error(`${context}: ${error.message}`);
-    return { message: error.message, isError: true };
-  } else if (error instanceof ArgumentError) {
-    log.warn(`${context}: ${error.message}`);
-    return { message: error.message, isError: false };
-  } else if (error instanceof ValidationError) {
-    log.warn(`${context}: ${error.message}`);
-    const errors = error.validationErrors ? `: ${error.validationErrors.join(', ')}` : '';
-    return { message: `${error.message}${errors}`, isError: false };
-  } else if (error instanceof LlmServiceError) {
-    log.error(`${context}: ${error.message}`);
-    return { message: `Service error: ${error.message}`, isError: true };
-  } else {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    log.error(`${context}: ${errorMessage}`);
-    return { message: `Unexpected error: ${errorMessage}`, isError: true };
-  }
-}
-
-// Simulates calling the LLM service
-// This is handled internally by the server - no external API calls
-async function callLlmService(messages: Array<{
-  role: "user" | "assistant";
-  content: { type: "text"; text: string };
-}>): Promise<string> {
-  try {
-    log.debug(`Sending ${messages.length} messages to LLM service`);
-    if (messages.length > 0) {
-      const lastMessage = messages[messages.length - 1];
-      log.debug(`Last message: ${JSON.stringify(lastMessage.content)}`);
-    }
-    
-    // Here we'd actually call an LLM service, but this is a simulated response
-    // For demonstration, returning a simple response
-    return "This is a simulated response from the LLM service. The actual implementation will handle LLM interactions internally.";
-  } catch (error) {
-    throw new LlmServiceError(`Failed to call LLM service: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-// Validate JSON arguments against the prompt's expected arguments
-function validateJsonArguments(jsonArgs: any, prompt: PromptData): { valid: boolean; errors?: string[]; sanitizedArgs?: Record<string, any> } {
-  const errors: string[] = [];
-  const sanitizedArgs: Record<string, any> = {};
-  
-  // Check for unexpected properties
-  const expectedArgNames = prompt.arguments.map(arg => arg.name);
-  const providedArgNames = Object.keys(jsonArgs);
-  
-  for (const argName of providedArgNames) {
-    if (!expectedArgNames.includes(argName)) {
-      errors.push(`Unexpected argument: ${argName}`);
-    }
-  }
-  
-  // Check for and sanitize expected arguments
-  for (const arg of prompt.arguments) {
-    const value = jsonArgs[arg.name];
-    
-    // All arguments are treated as optional now
-    if (value !== undefined) {
-      // Sanitize the value based on expected type
-      // This is a simple implementation - expand as needed for your use case
-      if (typeof value === "string") {
-        // Sanitize string inputs
-        sanitizedArgs[arg.name] = value
-          .replace(/[<>]/g, '') // Remove potentially dangerous HTML characters
-          .trim();
-      } else if (typeof value === "number") {
-        // Ensure it's a valid number
-        sanitizedArgs[arg.name] = isNaN(value) ? 0 : value;
-      } else if (typeof value === "boolean") {
-        sanitizedArgs[arg.name] = !!value; // Ensure boolean type
-      } else if (Array.isArray(value)) {
-        // For arrays, sanitize each element if they're strings
-        sanitizedArgs[arg.name] = value.map(item => 
-          typeof item === "string" ? item.replace(/[<>]/g, '').trim() : item
-        );
-      } else if (value !== null && typeof value === "object") {
-        // For objects, convert to string for simplicity
-        sanitizedArgs[arg.name] = JSON.stringify(value);
-      } else {
-        // For any other type, convert to string
-        sanitizedArgs[arg.name] = String(value);
-      }
-    }
-  }
-  
-  return {
-    valid: errors.length === 0,
-    errors: errors.length > 0 ? errors : undefined,
-    sanitizedArgs
-  };
-}
-
-// Helper function to process templates
-function processTemplate(
-  template: string, 
-  args: Record<string, string>, 
-  specialContext: Record<string, string> = {}
-): string {
-  let processed = template;
-  
-  // Process special context placeholders first
-  Object.entries(specialContext).forEach(([key, value]) => {
-    processed = processed.replace(
-      new RegExp(`\\{\\{${key}\\}\\}`, "g"),
-      String(value)
-    );
-  });
-  
-  // Replace regular placeholders with argument values
-  Object.entries(args).forEach(([key, value]) => {
-    if (value !== undefined) {
-      processed = processed.replace(
-        new RegExp(`\\{\\{${key}\\}\\}`, "g"),
-        String(value)
-      );
-    }
-  });
-  
-  return processed;
+  return utilsHandleError(error, context, log);
 }
 
 // Process the prompt with the parsed arguments and optional system message
@@ -598,7 +610,7 @@ async function runPromptDirectly(promptId: string, parsedArgs: Record<string, st
     };
     
     // Process the template to replace all placeholders
-    userMessageText = processTemplate(userMessageText, parsedArgs, specialContext);
+    userMessageText = await processTemplateAsync(userMessageText, parsedArgs, specialContext);
     
     // Add the message to conversation history
     addToConversationHistory({
@@ -608,23 +620,17 @@ async function runPromptDirectly(promptId: string, parsedArgs: Record<string, st
       isProcessedTemplate: true
     });
     
-    // Execute the LLM call
-    const llmResponse = await callLlmService([{
-      role: "user",
-      content: {
-        type: "text",
-        text: userMessageText
-      }
-    }]);
+    // Generate a response (echo in this MCP implementation)
+    const response = `Processed prompt: ${promptId}\nWith message: ${userMessageText}`;
     
     // Store the response in conversation history
     addToConversationHistory({
       role: "assistant",
-      content: llmResponse,
+      content: response,
       timestamp: Date.now()
     });
     
-    return llmResponse;
+    return response;
   } catch (error) {
     const { message } = handleError(error, `Error executing prompt '${promptId}'`);
     return message;
@@ -814,70 +820,18 @@ interface ChainExecutionState {
 // Current active chain execution (only one at a time for simplicity)
 let currentChainExecution: ChainExecutionState | null = null;
 
-// Function to start a new chain execution
-function startChainExecution(chainId: string, totalSteps: number, initialArgs: Record<string, string>): ChainExecutionState {
-  const newExecution: ChainExecutionState = {
-    chainId,
-    currentStepIndex: 0, // 0-based index
-    totalSteps,
-    stepResults: { ...initialArgs },
-    startTime: Date.now()
-  };
-  
-  // Store as current execution
-  currentChainExecution = newExecution;
-  
-  log.info(`Started new chain execution for chain '${chainId}' with ${totalSteps} steps`);
-  return newExecution;
-}
 
-// Function to advance to the next step in the chain
-function advanceChainExecution(stepOutput: string): ChainExecutionState | null {
-  if (!currentChainExecution) {
-    log.warn("Attempted to advance chain execution but no chain is currently active");
-    return null;
-  }
-  
-  // Store the output from the current step
-  const stepIndex = currentChainExecution.currentStepIndex;
-  currentChainExecution.stepResults[`step_${stepIndex}_output`] = stepOutput;
-  
-  // Move to the next step
-  currentChainExecution.currentStepIndex++;
-  
-  // Check if we've completed all steps
-  if (currentChainExecution.currentStepIndex >= currentChainExecution.totalSteps) {
-    log.info(`Chain execution for '${currentChainExecution.chainId}' completed all ${currentChainExecution.totalSteps} steps`);
-    
-    // Reset current execution since we're done
-    const completedExecution = currentChainExecution;
-    currentChainExecution = null;
-    
-    return completedExecution;
-  }
-  
-  log.info(`Advanced chain execution for '${currentChainExecution.chainId}' to step ${currentChainExecution.currentStepIndex + 1}/${currentChainExecution.totalSteps}`);
-  return currentChainExecution;
-}
-
-// Function to clear the current chain execution (e.g., in case of errors)
-function clearChainExecution(): void {
-  if (currentChainExecution) {
-    log.info(`Cleared chain execution for '${currentChainExecution.chainId}' after completing ${currentChainExecution.currentStepIndex}/${currentChainExecution.totalSteps} steps`);
-    currentChainExecution = null;
-  }
-}
 
 // Modify the process_slash_command tool to use the validation utility
 server.tool(
   "process_slash_command",
-  "Process slash commands that trigger prompt templates with optional arguments",
+  "Process commands that trigger prompt templates with optional arguments",
   {
-    command: z.string().describe("The slash command to process, e.g., '/content_analysis Hello world'")
+    command: z.string().describe("The command to process, e.g., '>>content_analysis Hello world' or '/content_analysis Hello world'")
   },
   async ({ command }, extra) => {
     try {
-      log.info(`Processing slash command: ${command}`);
+      log.info(`Processing command: ${command}`);
       
       // Store original user input in conversation history
       addToConversationHistory({
@@ -887,14 +841,15 @@ server.tool(
       });
       
       // Extract the command name and arguments
-      // Format: /command_name argument_text
-      const match = command.match(/^\/([a-zA-Z0-9_-]+)\s*(.*)/);
+      // Format: >>command_name argument_text or /command_name argument_text
+      // The new preferred format is >> but we still support / for backward compatibility
+      const match = command.match(/^(>>|\/)([a-zA-Z0-9_-]+)\s*(.*)/);
       
       if (!match) {
-        throw new ValidationError("Invalid slash command format. Use /command_name [arguments]");
+        throw new ValidationError("Invalid command format. Use >>command_name [arguments] or /command_name [arguments]");
       }
       
-      const [, commandName, commandArgs] = match;
+      const [, prefix, commandName, commandArgs] = match;
       
       // Find the matching prompt
       const matchingPrompt = promptsData.find(
@@ -902,7 +857,7 @@ server.tool(
       );
       
       if (!matchingPrompt) {
-        throw new PromptError(`Unknown command: /${commandName}. Type /listprompts to see available commands.`);
+        throw new PromptError(`Unknown command: ${prefix}${commandName}. Type >>listprompts to see available commands.`);
       }
       
       // Parse arguments
@@ -910,7 +865,7 @@ server.tool(
       
       if (commandArgs) {
         if (matchingPrompt.arguments.length === 0) {
-          log.warn(`Command '/${commandName}' doesn't accept arguments, but arguments were provided: ${commandArgs}`);
+          log.warn(`Command '${prefix}${commandName}' doesn't accept arguments, but arguments were provided: ${commandArgs}`);
         } else if (matchingPrompt.arguments.length === 1 && 
                   (!commandArgs.trim().startsWith("{") || !commandArgs.trim().endsWith("}"))) {
           // Single argument, not in JSON format, assign directly
@@ -925,27 +880,40 @@ server.tool(
               const validation = validateJsonArguments(parsedArgs, matchingPrompt);
               
               if (!validation.valid && validation.errors) {
-                throw new ValidationError(`Invalid arguments for /${commandName}`, validation.errors);
+                // Instead of throwing an error, log it and use previous_message
+                log.warn(`Invalid arguments for ${prefix}${commandName}: ${validation.errors.join(', ')}. Using previous message instead.`);
+                // Use previous_message for all arguments
+                matchingPrompt.arguments.forEach(arg => {
+                  promptArgValues[arg.name] = `{{previous_message}}`;
+                });
+              } else {
+                // Use the sanitized arguments
+                Object.assign(promptArgValues, validation.sanitizedArgs || {});
               }
-              
-              // Use the sanitized arguments
-              Object.assign(promptArgValues, validation.sanitizedArgs || {});
             } else if (matchingPrompt.arguments.length === 1) {
               // Single argument, but not in JSON format
               promptArgValues[matchingPrompt.arguments[0].name] = commandArgs;
             } else {
-              // Provide guidance on correct format
-              log.debug(`Multi-argument prompt requested (${matchingPrompt.arguments.length} args). Command arguments not in JSON format.`);
-              throw new ArgumentError(`Invalid argument format for /${commandName}. Multiple arguments should be provided as JSON. Example: /${commandName} {"arg1": "value1", "arg2": "value2"}`);
+              // Instead of throwing an error for multi-argument prompts with incorrect format,
+              // log a warning and use previous_message for all arguments
+              log.warn(`Multi-argument prompt requested (${matchingPrompt.arguments.length} args). Command arguments not in JSON format. Using previous message instead.`);
+              matchingPrompt.arguments.forEach(arg => {
+                promptArgValues[arg.name] = `{{previous_message}}`;
+              });
             }
           } catch (e) {
             if (e instanceof ValidationError || e instanceof ArgumentError) {
-              throw e;
-            }
-            log.debug("Error parsing JSON arguments:", e);
-            // Still assign the first argument if there is content
-            if (matchingPrompt.arguments.length > 0 && commandArgs) {
-              promptArgValues[matchingPrompt.arguments[0].name] = commandArgs;
+              // Instead of re-throwing, log the error and use previous_message
+              log.warn(`Error with arguments for ${prefix}${commandName}: ${e.message}. Using previous message instead.`);
+              matchingPrompt.arguments.forEach(arg => {
+                promptArgValues[arg.name] = `{{previous_message}}`;
+              });
+            } else {
+              log.debug("Error parsing JSON arguments:", e);
+              // For other errors, use previous_message for all arguments
+              matchingPrompt.arguments.forEach(arg => {
+                promptArgValues[arg.name] = `{{previous_message}}`;
+              });
             }
           }
         }
@@ -953,20 +921,12 @@ server.tool(
       
       log.debug("Prepared arguments for prompt:", promptArgValues);
       
-      // Check for missing arguments but treat all as optional
-      const missingArgs = matchingPrompt.arguments
-        .filter(arg => !promptArgValues[arg.name])
-        .map(arg => arg.name);
-      
-      if (missingArgs.length > 0) {
-        // Log an info message rather than a warning
-        log.info(`Missing arguments for '/${commandName}': ${missingArgs.join(", ")}. Will attempt to use conversation context.`);
-        
-        // Use previous_message for all missing arguments
-        missingArgs.forEach(argName => {
-          promptArgValues[argName] = `{{previous_message}}`;
-        });
-      }
+      // Ensure all defined arguments have values (using previous_message as fallback)
+      matchingPrompt.arguments.forEach(arg => {
+        if (!promptArgValues[arg.name]) {
+          promptArgValues[arg.name] = `{{previous_message}}`;
+        }
+      });
       
       // Find the converted prompt with template data
       const convertedPrompt = convertedPrompts.find(cp => cp.id === matchingPrompt.id);
@@ -977,13 +937,39 @@ server.tool(
       
       // Check if this is a chain prompt
       if (convertedPrompt.isChain && convertedPrompt.chainSteps && convertedPrompt.chainSteps.length > 0) {
-        log.info(`Command '/${commandName}' is a chain prompt with ${convertedPrompt.chainSteps.length} steps. NOT automatically executing the chain.`);
+        log.info(`Command '${prefix}${commandName}' is a chain prompt with ${convertedPrompt.chainSteps.length} steps. NOT automatically executing the chain.`);
         
         // No longer automatically execute the entire chain
         // Instead, we'll process this as a regular prompt
-        // The LLM is expected to make separate calls for each step in the chain
         
         // Regular prompt processing continues below
+      }
+      
+      // If this is a chain prompt, we need to handle it differently
+      if (convertedPrompt.isChain) {
+        // For chain prompts, we'll return a message that explains the chain and its steps
+        const chainSteps = convertedPrompt.chainSteps || [];
+        
+        // Create a message that explains the chain and its steps
+        const chainExplanation = [
+          `This is a prompt chain: ${convertedPrompt.name} (${convertedPrompt.id})`,
+          `It consists of ${chainSteps.length} steps that should be executed in sequence:`,
+          ...chainSteps.map((step: any, index: number) => 
+            `${index + 1}. ${step.stepName} (${step.promptId})`
+          ),
+          `\nTo execute this chain, run each step in sequence using the '>>' or '/' command syntax:`,
+          ...chainSteps.map((step: any, index: number) => 
+            `${index + 1}. >>${step.promptId} [with appropriate arguments]`
+          ),
+          `\nEach step will use outputs from previous steps as inputs for the next step.`
+        ].join('\n');
+        
+        return { 
+          content: [{ 
+            type: "text", 
+            text: chainExplanation
+          }]
+        };
       }
       
       // For all prompts, continue with the original processing
@@ -1004,7 +990,7 @@ server.tool(
       };
       
       // Process the template to replace all placeholders
-      userMessageText = processTemplate(userMessageText, promptArgValues, specialContext);
+      userMessageText = await processTemplateAsync(userMessageText, promptArgValues, specialContext);
       
       // Store the processed message in history as a user message
       // This ensures that getPreviousMessage() can find it when needed for the {{previous_message}} placeholder
@@ -1031,7 +1017,7 @@ server.tool(
         }]
       };
     } catch (error) {
-      const { message, isError } = handleError(error, "Error processing slash command");
+      const { message, isError } = handleError(error, "Error processing command");
       return { 
         content: [{ 
           type: "text", 
@@ -1043,15 +1029,18 @@ server.tool(
   }
 );
 
-// Add a listprompts tool to list available prompts
+// Register the listprompts tool
 server.tool(
   "listprompts",
-  "Displays a formatted list of all available commands and their usage",
-  async () => {
+  {
+    command: z.string().optional().describe("Optional filter text to show only matching commands")
+  },
+  async ({ command }, extra) => {
     try {
-      log.info("Executing listprompts command");
+      // Check if the command is actually a listprompts command
+      const match = command ? command.match(/^(>>|\/)listprompts\s*(.*)/) : null;
+      const filterText = match ? match[2].trim() : '';
       
-      // Create a formatted list of all available prompts
       let listpromptsText = "# Available Commands\n\n";
       
       // Group prompts by category
@@ -1118,10 +1107,13 @@ server.tool(
         });
       });
       
-      // Add special commands section
+      // Special commands
       listpromptsText += "## Special Commands\n\n";
-      listpromptsText += "### /listprompts\n\n";
-      listpromptsText += "Displays this listprompts message listing all available commands and their usage.\n\n";
+      
+      // Add the listprompts command itself
+      listpromptsText += "### >>listprompts\n\n";
+      listpromptsText += "Lists all available commands and their usage.\n\n";
+      listpromptsText += "**Usage:** `>>listprompts` or `/listprompts`\n\n";
       
       return {
         content: [{ type: "text", text: listpromptsText }]
@@ -1138,6 +1130,562 @@ server.tool(
     }
   }
 );
+
+// Register the update_prompt tool
+server.tool(
+  "update_prompt",
+  {
+    id: z.string().describe("Unique identifier for the prompt"),
+    name: z.string().describe("Display name for the prompt"),
+    category: z.string().describe("Category this prompt belongs to"),
+    description: z.string().describe("Description of the prompt"),
+    systemMessage: z.string().optional().describe("Optional system message for the prompt"),
+    userMessageTemplate: z.string().describe("Template for generating the user message"),
+    arguments: z.array(
+      z.object({
+        name: z.string().describe("Name of the argument"),
+        description: z.string().optional().describe("Optional description of the argument"),
+        required: z.boolean().describe("Whether this argument is required")
+      })
+    ).describe("Arguments accepted by this prompt"),
+    isChain: z.boolean().optional().describe("Whether this prompt is a chain of prompts"),
+    chainSteps: z.array(
+      z.object({
+        promptId: z.string().describe("ID of the prompt to execute in this step"),
+        stepName: z.string().describe("Name of this step"),
+        inputMapping: z.record(z.string()).optional().describe("Maps chain inputs to this step's inputs"),
+        outputMapping: z.record(z.string()).optional().describe("Maps this step's outputs to chain outputs")
+      })
+    ).optional().describe("Steps in the chain if this is a chain prompt")
+  },
+  async (args, extra) => {
+    try {
+      log.info(`Updating prompt: ${args.id}`);
+      
+      // Read the current prompts.json file
+      const PROMPTS_FILE = path.join(__dirname, "..", config.prompts.file);
+      const fileContent = await readFile(PROMPTS_FILE, "utf8");
+      const promptsFile = JSON.parse(fileContent) as PromptsFile;
+      
+      // Check if the category exists
+      const categoryExists = promptsFile.categories.some(cat => cat.id === args.category);
+      if (!categoryExists) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Category '${args.category}' does not exist. Please create the category first or use an existing category.`
+            }
+          ],
+          isError: true
+        };
+      }
+      
+      // Check if the prompt already exists
+      const existingPromptIndex = promptsFile.prompts.findIndex(p => p.id === args.id);
+      const promptExists = existingPromptIndex !== -1;
+      
+      // Determine the file path for the prompt
+      const promptFilePath = `prompts/${args.category}/${args.id}.md`;
+      const fullPromptFilePath = path.join(__dirname, "..", promptFilePath);
+      
+      // Create the prompt directory if it doesn't exist
+      const promptDirPath = path.join(__dirname, "..", "prompts", args.category);
+      try {
+        await fs.mkdir(promptDirPath, { recursive: true });
+      } catch (error) {
+        log.error(`Error creating directory ${promptDirPath}:`, error);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to create directory for category '${args.category}'.`
+            }
+          ],
+          isError: true
+        };
+      }
+      
+      // Create the prompt file content
+      let promptFileContent = `# ${args.name}\n\n`;
+      promptFileContent += `## Description\n${args.description}\n\n`;
+      
+      if (args.systemMessage) {
+        promptFileContent += `## System Message\n${args.systemMessage}\n\n`;
+      }
+      
+      promptFileContent += `## User Message Template\n${args.userMessageTemplate}\n`;
+      
+      // Add chain steps if this is a chain prompt
+      if (args.isChain && args.chainSteps && args.chainSteps.length > 0) {
+        promptFileContent += `\n## Chain Steps\n\n`;
+        
+        const totalSteps = args.chainSteps.length;
+        args.chainSteps.forEach((step: any, index: number) => {
+          promptFileContent += `${index + 1}. promptId: ${step.promptId}\n`;
+          promptFileContent += `   stepName: ${step.stepName} (Step ${index + 1} of ${totalSteps})\n`;
+          
+          if (step.inputMapping) {
+            promptFileContent += `   inputMapping:\n`;
+            for (const [key, value] of Object.entries(step.inputMapping)) {
+              promptFileContent += `     ${key}: ${value}\n`;
+            }
+          }
+          
+          if (step.outputMapping) {
+            promptFileContent += `   outputMapping:\n`;
+            for (const [key, value] of Object.entries(step.outputMapping)) {
+              promptFileContent += `     ${key}: ${value}\n`;
+            }
+          }
+          
+          promptFileContent += `\n`;
+        });
+        
+        // Add Output Format section for chain prompts
+        promptFileContent += `## Output Format\n\n`;
+        promptFileContent += `After completing all ${totalSteps} steps in the chain, you will have a final output that:\n\n`;
+        promptFileContent += `1. Is well-organized and clearly structured\n`;
+        promptFileContent += `2. Represents the culmination of the entire chain process\n\n`;
+        promptFileContent += `The final output will be the result of the last step in the chain.\n`;
+      }
+      
+      // Write the prompt file
+      try {
+        await writeFile(fullPromptFilePath, promptFileContent, "utf8");
+        log.info(`Created prompt file: ${fullPromptFilePath}`);
+      } catch (error) {
+        log.error(`Error writing prompt file ${fullPromptFilePath}:`, error);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to create prompt file.`
+            }
+          ],
+          isError: true
+        };
+      }
+      
+      // Create or update the prompt entry in prompts.json
+      const promptEntry: PromptData = {
+        id: args.id,
+        name: args.name,
+        category: args.category,
+        description: args.description,
+        file: promptFilePath,
+        arguments: args.arguments
+      };
+      
+      if (promptExists) {
+        // Update existing prompt
+        promptsFile.prompts[existingPromptIndex] = promptEntry;
+      } else {
+        // Add new prompt
+        promptsFile.prompts.push(promptEntry);
+      }
+      
+      // Write the updated prompts.json file
+      try {
+        await writeFile(PROMPTS_FILE, JSON.stringify(promptsFile, null, 2), "utf8");
+        log.info(`Updated prompts.json with prompt: ${args.id}`);
+        
+        // Reload prompts using the new function
+        try {
+          const result = await reloadPrompts();
+          // Replace the global convertedPrompts array with the new values
+          convertedPrompts.length = 0;
+          result.convertedPrompts.forEach(prompt => convertedPrompts.push(prompt));
+          log.info(`Reloaded prompts after updating prompt: ${args.id}`);
+        } catch (reloadError) {
+          log.error(`Error reloading prompts after updating prompt: ${args.id}`, reloadError);
+          // Continue even if reload fails
+        }
+      } catch (error) {
+        log.error(`Error writing prompts.json:`, error);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to update prompts.json file.`
+            }
+          ],
+          isError: true
+        };
+      }
+      
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Successfully ${promptExists ? 'updated' : 'created'} prompt: ${args.id}\nPrompt file created at: ${promptFilePath}`
+          }
+        ]
+      };
+    } catch (error) {
+      log.error(`Error updating prompt:`, error);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Failed to update prompt: ${error instanceof Error ? error.message : String(error)}`
+          }
+        ],
+        isError: true
+      };
+    }
+  }
+);
+
+// Register the delete_prompt tool
+server.tool(
+  "delete_prompt",
+  {
+    id: z.string().describe("Unique identifier for the prompt to delete"),
+  },
+  async (args, extra) => {
+    try {
+      log.info(`Deleting prompt: ${args.id}`);
+      
+      // Read the current prompts.json file
+      const PROMPTS_FILE = path.join(__dirname, "..", config.prompts.file);
+      const fileContent = await readFile(PROMPTS_FILE, "utf8");
+      const promptsFile = JSON.parse(fileContent) as PromptsFile;
+      
+      // Extract the id from the request body
+      const { id } = args;
+      
+      // Find the prompt to delete
+      const promptIndex = promptsFile.prompts.findIndex(p => p.id === id);
+      
+      if (promptIndex === -1) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Prompt with ID '${id}' not found`
+            }
+          ],
+          isError: true
+        };
+      }
+      
+      // Get the prompt data before removing it
+      const promptToDelete = promptsFile.prompts[promptIndex];
+      
+      // Remove the prompt from the array
+      promptsFile.prompts.splice(promptIndex, 1);
+      
+      // Write the updated prompts.json file
+      await writeFile(PROMPTS_FILE, JSON.stringify(promptsFile, null, 2), "utf8");
+      
+      // Delete the prompt file if it exists
+      try {
+        const promptFilePath = path.join(__dirname, "..", promptToDelete.file);
+        await fs.unlink(promptFilePath);
+        log.info(`Deleted prompt file: ${promptFilePath}`);
+      } catch (fileError) {
+        log.warn(`Could not delete prompt file: ${fileError instanceof Error ? fileError.message : String(fileError)}`);
+        // Continue even if file deletion fails
+      }
+      
+      // Reload prompts and categories
+      try {
+        const result = await reloadPrompts();
+        log.info(`Reloaded ${promptsData.length} prompts and ${categories.length} categories after deleting prompt: ${id}`);
+      } catch (error) {
+        log.error("Error reloading prompts data:", error);
+        // Continue even if reload fails
+      }
+      
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Prompt '${promptToDelete.name}' (ID: ${id}) deleted successfully`
+          }
+        ]
+      };
+    } catch (error) {
+      log.error("Error deleting prompt:", error);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Failed to delete prompt: ${error instanceof Error ? error.message : String(error)}`
+          }
+        ],
+        isError: true
+      };
+    }
+  }
+);
+
+// Register the modify_prompt_section tool
+server.tool(
+  "modify_prompt_section",
+  {
+    id: z.string().describe("Unique identifier of the prompt to modify"),
+    section_name: z.string().describe("Name of the section to modify (valid values: 'title', 'description', 'System Message', 'User Message Template', or any custom section)"),
+    new_content: z.string().describe("New content for the specified section")
+  },
+  async (args: { id: string; section_name: string; new_content: string }) => {
+    try {
+      log.info(`Attempting to modify section '${args.section_name}' of prompt '${args.id}'`);
+      
+      // Read the current prompts.json file
+      const PROMPTS_FILE = path.join(__dirname, "..", config.prompts.file);
+      const fileContent = await readFile(PROMPTS_FILE, "utf8");
+      const promptsFile = JSON.parse(fileContent) as PromptsFile;
+      
+      // Find the prompt
+      const promptIndex = promptsFile.prompts.findIndex(p => p.id === args.id);
+      if (promptIndex === -1) {
+        log.error(`Prompt with ID '${args.id}' not found`);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Prompt with ID '${args.id}' not found`
+            }
+          ],
+          isError: true
+        };
+      }
+      
+      const prompt = promptsFile.prompts[promptIndex];
+      
+      // Read the prompt file
+      const promptFilePath = path.join(__dirname, "..", prompt.file);
+      let promptContent: string;
+      try {
+        promptContent = await readFile(promptFilePath, "utf8");
+      } catch (error) {
+        log.error(`Error reading prompt file ${promptFilePath}:`, error);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to read prompt file: ${error instanceof Error ? error.message : String(error)}`
+            }
+          ],
+          isError: true
+        };
+      }
+      
+      // Parse the prompt sections
+      const sections: Record<string, string> = {};
+      
+      // Extract the title (first # heading)
+      const titleMatch = promptContent.match(/^# (.+?)(?=\n\n|\n##)/s);
+      if (titleMatch) {
+        sections.title = titleMatch[1].trim();
+        
+        // Extract description (content between title and first ## heading)
+        const descMatch = promptContent.match(/^# .+?\n\n([\s\S]+?)(?=\n## )/s);
+        if (descMatch) {
+          sections.description = descMatch[1].trim();
+        } else {
+          sections.description = '';
+        }
+      }
+      
+      // Extract other sections (## headings)
+      const sectionMatches = Array.from(promptContent.matchAll(/## ([^\n]+)\n\n([\s\S]+?)(?=\n## |\n# |\n$)/g));
+      for (const match of sectionMatches) {
+        const sectionName = match[1].trim();
+        const sectionContent = match[2].trim();
+        sections[sectionName] = sectionContent;
+      }
+      
+      // Check if the section exists
+      const normalizedSectionName = args.section_name === 'title' ? 'title' : 
+                                   args.section_name === 'description' ? 'description' : 
+                                   args.section_name === 'System Message' ? 'System Message' :
+                                   args.section_name === 'User Message Template' ? 'User Message Template' :
+                                   args.section_name;
+      
+      if (!(normalizedSectionName in sections) && 
+          normalizedSectionName !== 'description' && 
+          normalizedSectionName !== 'System Message' && 
+          normalizedSectionName !== 'User Message Template') {
+        log.error(`Section '${args.section_name}' not found in prompt '${args.id}'`);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Section '${args.section_name}' not found in prompt '${args.id}'`
+            }
+          ],
+          isError: true
+        };
+      }
+      
+      // Store the original prompt data for potential rollback
+      const originalPrompt = { ...prompt };
+      const originalContent = promptContent;
+      
+      // Create a backup of the original prompt file
+      const backupPath = `${promptFilePath}.bak`;
+      try {
+        await writeFile(backupPath, originalContent, "utf8");
+      } catch (error) {
+        log.error(`Error creating backup file ${backupPath}:`, error);
+        // Continue even if backup creation fails
+      }
+      
+      try {
+        // Modify the section
+        if (normalizedSectionName === 'title') {
+          sections.title = args.new_content;
+        } else if (normalizedSectionName === 'description') {
+          sections.description = args.new_content;
+        } else if (normalizedSectionName === 'System Message') {
+          sections['System Message'] = args.new_content;
+        } else if (normalizedSectionName === 'User Message Template') {
+          sections['User Message Template'] = args.new_content;
+        } else {
+          sections[normalizedSectionName] = args.new_content;
+        }
+        
+        // Reconstruct the prompt content
+        let newPromptContent = `# ${sections.title}\n\n${sections.description}\n\n`;
+        
+        // Add other sections
+        for (const [name, content] of Object.entries(sections)) {
+          if (name !== 'title' && name !== 'description') {
+            newPromptContent += `## ${name}\n\n${content}\n\n`;
+          }
+        }
+        
+        // Delete the prompt from prompts.json
+        promptsFile.prompts.splice(promptIndex, 1);
+        await writeFile(PROMPTS_FILE, JSON.stringify(promptsFile, null, 2), "utf8");
+        
+        // Delete the prompt file
+        try {
+          await fs.unlink(promptFilePath);
+          log.info(`Deleted prompt file: ${promptFilePath}`);
+        } catch (fileError) {
+          log.warn(`Could not delete prompt file: ${fileError instanceof Error ? fileError.message : String(fileError)}`);
+          // Continue even if file deletion fails
+        }
+        
+        // Create the updated prompt
+        const updatedPrompt: PromptData = {
+          ...originalPrompt,
+          name: normalizedSectionName === 'title' ? args.new_content : originalPrompt.name
+        };
+        
+        // Write the updated prompt file
+        await writeFile(promptFilePath, newPromptContent, "utf8");
+        
+        // Update prompts.json
+        promptsFile.prompts.push(updatedPrompt);
+        await writeFile(PROMPTS_FILE, JSON.stringify(promptsFile, null, 2), "utf8");
+        
+        // Reload prompts and categories
+        try {
+          const result = await reloadPrompts();
+          log.info(`Reloaded ${promptsData.length} prompts and ${categories.length} categories after modifying section: ${args.section_name}`);
+        } catch (error) {
+          log.error("Error reloading prompts data:", error);
+          // Continue even if reload fails
+        }
+        
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Successfully modified section '${args.section_name}' in prompt '${args.id}'`
+            }
+          ]
+        };
+      } catch (error) {
+        log.error(`Error modifying prompt section, attempting rollback:`, error);
+        
+        try {
+          // Restore the original prompt file if backup exists
+          try {
+            await fs.copyFile(backupPath, promptFilePath);
+            log.info(`Restored original prompt file from backup`);
+          } catch (restoreError) {
+            log.error(`Error restoring prompt file from backup:`, restoreError);
+          }
+          
+          // Restore the prompts.json file
+          promptsFile.prompts[promptIndex] = originalPrompt;
+          await writeFile(PROMPTS_FILE, JSON.stringify(promptsFile, null, 2), "utf8");
+          log.info(`Restored original prompt entry in prompts.json`);
+          
+          // Reload prompts and categories
+          try {
+            const result = await reloadPrompts();
+            log.info(`Reloaded ${promptsData.length} prompts and ${categories.length} categories after rollback`);
+          } catch (reloadError) {
+            log.error("Error reloading prompts data after rollback:", reloadError);
+          }
+        } catch (rollbackError) {
+          log.error(`Error during rollback:`, rollbackError);
+        }
+        
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to modify prompt section: ${error instanceof Error ? error.message : String(error)}`
+            }
+          ],
+          isError: true
+        };
+      } finally {
+        // Clean up the backup file
+        try {
+          await fs.unlink(backupPath);
+        } catch (error) {
+          log.warn(`Failed to delete backup file ${backupPath}:`, error);
+        }
+      }
+    } catch (error) {
+      log.error(`Error in modify_prompt_section:`, error);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Failed to modify prompt section: ${error instanceof Error ? error.message : String(error)}`
+          }
+        ],
+        isError: true
+      };
+    }
+  }
+);
+
+// New function to reload prompts without restarting the server
+async function reloadPrompts(): Promise<{ promptsData: PromptData[]; convertedPrompts: ConvertedPrompt[] }> {
+  try {
+    log.info(`Reloading prompts from ${PROMPTS_FILE}...`);
+    
+    // Re-read the prompts file
+    const fileContent = await readFile(PROMPTS_FILE, "utf8");
+    const promptsFile = JSON.parse(fileContent) as PromptsFile;
+    
+    // Update the global variables
+    promptsData = promptsFile.prompts;
+    categories = promptsFile.categories || [];
+    
+    // Re-convert markdown prompts to JSON
+    const newConvertedPrompts = await convertMarkdownPromptsToJson(promptsData);
+    
+    log.info(`Successfully reloaded ${promptsData.length} prompts and ${categories.length} categories`);
+    log.info(`Successfully converted ${newConvertedPrompts.length} prompts to JSON structure`);
+    
+    return { promptsData, convertedPrompts: newConvertedPrompts };
+  } catch (error) {
+    log.error(`Error reloading prompts:`, error);
+    throw error;
+  }
+}
 
 // Convert markdown prompts to JSON structure
 const convertedPrompts = await convertMarkdownPromptsToJson(promptsData);
@@ -1161,19 +1709,12 @@ for (const promptData of convertedPrompts) {
       try {
         log.debug(`Executing prompt '${promptData.name}' with args:`, args);
         
-        // Check for missing arguments but treat all as optional
-        const missingArgs = promptData.arguments
-          .filter(arg => (args[arg.name] === undefined || args[arg.name] === null))
-          .map(arg => arg.name);
-          
-        if (missingArgs.length > 0) {
-          log.info(`Missing arguments for prompt '${promptData.name}': ${missingArgs.join(", ")}. Will attempt to use conversation context.`);
-          
-          // For each missing argument, set it to use the previous message
-          missingArgs.forEach(argName => {
-            args[argName] = `{{previous_message}}`;
-          });
-        }
+        // Ensure all defined arguments have values (using previous_message as fallback)
+        promptData.arguments.forEach(arg => {
+          if (!args[arg.name]) {
+            args[arg.name] = `{{previous_message}}`;
+          }
+        });
         
         // Check if this is a chain prompt
         if (promptData.isChain && promptData.chainSteps && promptData.chainSteps.length > 0) {
@@ -1181,7 +1722,6 @@ for (const promptData of convertedPrompts) {
           
           // No longer automatically execute the entire chain
           // Instead, we'll process this as a regular prompt
-          // The LLM is expected to make separate calls for each step in the chain
           
           // Regular prompt processing continues below
         }
@@ -1451,6 +1991,547 @@ if (transport === "stdio") {
     }
     
     res.json(categoryPrompts);
+  });
+  
+  // Add API endpoints for tools
+  app.post("/api/v1/tools/create_category", async (req: Request, res: Response) => {
+    try {
+      log.info("API request to create category:", req.body);
+      
+      // Validate required fields
+      if (!req.body.id || !req.body.name || !req.body.description) {
+        return res.status(400).json({ 
+          error: "Missing required fields. Please provide id, name, and description." 
+        });
+      }
+      
+      // Implement the create_category functionality directly
+      try {
+        const { id, name, description } = req.body;
+        
+        // Read the current prompts.json file
+        const PROMPTS_FILE = path.join(__dirname, "..", config.prompts.file);
+        const fileContent = await readFile(PROMPTS_FILE, "utf8");
+        const promptsFile = JSON.parse(fileContent) as PromptsFile;
+        
+        // Check if the category already exists
+        const categoryExists = promptsFile.categories.some(cat => cat.id === id);
+        if (categoryExists) {
+          return res.status(400).json({ error: `Category '${id}' already exists.` });
+        }
+        
+        // Add the new category
+        promptsFile.categories.push({ id, name, description });
+        
+        // Write the updated file
+        await writeFile(PROMPTS_FILE, JSON.stringify(promptsFile, null, 2), "utf8");
+        
+        // Create the category directory if it doesn't exist
+        const categoryDirPath = path.join(__dirname, "..", "prompts", id);
+        try {
+          await fs.mkdir(categoryDirPath, { recursive: true });
+        } catch (error) {
+          log.error(`Error creating directory ${categoryDirPath}:`, error);
+          // Continue even if directory creation fails
+        }
+        
+        // Reload prompts and categories
+        try {
+          const result = await reloadPrompts();
+          log.info(`Reloaded ${promptsData.length} prompts and ${categories.length} categories after creating category: ${id}`);
+        } catch (error) {
+          log.error("Error reloading prompts data:", error);
+          // Continue even if reload fails
+        }
+        
+        // Return success response
+        return res.status(200).json({ 
+          success: true, 
+          message: `Category '${name}' created successfully` 
+        });
+      } catch (toolError) {
+        return res.status(400).json({ error: toolError instanceof Error ? toolError.message : String(toolError) });
+      }
+    } catch (error) {
+      log.error("Error handling create_category API request:", error);
+      return res.status(500).json({ 
+        error: "Internal server error", 
+        details: error instanceof Error ? error.message : String(error) 
+      });
+    }
+  });
+  
+  app.post("/api/v1/tools/update_prompt", async (req: Request, res: Response) => {
+    try {
+      log.info("API request to update prompt:", req.body);
+      
+      // Validate required fields
+      if (!req.body.id || !req.body.name || !req.body.category || !req.body.userMessageTemplate) {
+        return res.status(400).json({ 
+          error: "Missing required fields. Please provide id, name, category, and userMessageTemplate." 
+        });
+      }
+      
+      // Implement the update_prompt functionality directly
+      try {
+        const { 
+          id, 
+          name, 
+          category, 
+          description = "", 
+          systemMessage, 
+          userMessageTemplate, 
+          arguments: promptArgs = [], 
+          isChain = false, 
+          chainSteps 
+        } = req.body;
+        
+        // Read the current prompts.json file
+        const PROMPTS_FILE = path.join(__dirname, "..", config.prompts.file);
+        const fileContent = await readFile(PROMPTS_FILE, "utf8");
+        const promptsFile = JSON.parse(fileContent) as PromptsFile;
+        
+        // Check if the category exists
+        const categoryExists = promptsFile.categories.some(cat => cat.id === category);
+        if (!categoryExists) {
+          return res.status(400).json({ 
+            error: `Category '${category}' does not exist. Please create the category first or use an existing category.` 
+          });
+        }
+        
+        // Check if the prompt already exists
+        const promptIndex = promptsFile.prompts.findIndex(p => p.id === id);
+        const isNewPrompt = promptIndex === -1;
+        
+        // Create the prompt directory if it doesn't exist
+        const promptsDir = path.join(__dirname, "..", "prompts", category);
+        try {
+          await fs.mkdir(promptsDir, { recursive: true });
+        } catch (error) {
+          log.error(`Error creating directory ${promptsDir}:`, error);
+          // Continue even if directory creation fails
+        }
+        
+        // Construct the prompt file content
+        let promptFileContent = `# ${name}\n\n`;
+        promptFileContent += `${description}\n\n`;
+        
+        if (systemMessage) {
+          promptFileContent += `## System Message\n\n${systemMessage}\n\n`;
+        }
+        
+        promptFileContent += `## User Message Template\n\n${userMessageTemplate}\n\n`;
+        
+        if (isChain && chainSteps && chainSteps.length > 0) {
+          promptFileContent += `\n## Chain Steps\n\n`;
+          
+          const totalSteps = chainSteps.length;
+          chainSteps.forEach((step: any, index: number) => {
+            promptFileContent += `${index + 1}. promptId: ${step.promptId}\n`;
+            promptFileContent += `   stepName: ${step.stepName} (Step ${index + 1} of ${totalSteps})\n`;
+            
+            if (step.inputMapping) {
+              promptFileContent += `   inputMapping:\n`;
+              for (const [key, value] of Object.entries(step.inputMapping)) {
+                promptFileContent += `     ${key}: ${value}\n`;
+              }
+            }
+            
+            if (step.outputMapping) {
+              promptFileContent += `   outputMapping:\n`;
+              for (const [key, value] of Object.entries(step.outputMapping)) {
+                promptFileContent += `     ${key}: ${value}\n`;
+              }
+            }
+            
+            promptFileContent += `\n`;
+          });
+          
+          // Add Output Format section for chain prompts
+          promptFileContent += `## Output Format\n\n`;
+          promptFileContent += `After completing all ${totalSteps} steps in the chain, you will have a final output that:\n\n`;
+          promptFileContent += `1. Is well-organized and clearly structured\n`;
+          promptFileContent += `2. Represents the culmination of the entire chain process\n\n`;
+          promptFileContent += `The final output will be the result of the last step in the chain.\n`;
+        }
+        
+        // Write the prompt file
+        const promptFilePath = path.join(promptsDir, `${id}.md`);
+        await writeFile(promptFilePath, promptFileContent, "utf8");
+        
+        // Create or update the prompt entry in prompts.json
+        const promptData: PromptData = {
+          id,
+          name,
+          category,
+          description,
+          file: `prompts/${category}/${id}.md`,
+          arguments: promptArgs
+        };
+        
+        if (isNewPrompt) {
+          promptsFile.prompts.push(promptData);
+        } else {
+          promptsFile.prompts[promptIndex] = promptData;
+        }
+        
+        // Write the updated prompts.json file
+        await writeFile(PROMPTS_FILE, JSON.stringify(promptsFile, null, 2), "utf8");
+        
+        // Reload prompts and categories
+        try {
+          const result = await reloadPrompts();
+          log.info(`Reloaded ${promptsData.length} prompts and ${categories.length} categories after updating prompt: ${id}`);
+        } catch (error) {
+          log.error("Error reloading prompts data:", error);
+          // Continue even if reload fails
+        }
+        
+        // Return success response
+        return res.status(200).json({ 
+          success: true, 
+          message: `Prompt '${name}' ${isNewPrompt ? 'created' : 'updated'} successfully` 
+        });
+      } catch (toolError) {
+        return res.status(400).json({ error: toolError instanceof Error ? toolError.message : String(toolError) });
+      }
+    } catch (error) {
+      log.error("Error handling update_prompt API request:", error);
+      return res.status(500).json({ 
+        error: "Internal server error", 
+        details: error instanceof Error ? error.message : String(error) 
+      });
+    }
+  });
+  
+  // Add DELETE endpoint to delete a prompt
+  app.delete("/api/v1/tools/prompts/:id", async (req: Request, res: Response) => {
+    try {
+      const id = req.params.id;
+      log.info(`API request to delete prompt: ${id}`);
+      
+      if (!id) {
+        return res.status(400).json({ error: "Prompt ID is required" });
+      }
+      
+      try {
+        // Read the current prompts.json file
+        const PROMPTS_FILE = path.join(__dirname, "..", config.prompts.file);
+        const fileContent = await readFile(PROMPTS_FILE, "utf8");
+        const promptsFile = JSON.parse(fileContent) as PromptsFile;
+        
+        // Find the prompt to delete
+        const promptIndex = promptsFile.prompts.findIndex(p => p.id === id);
+        
+        if (promptIndex === -1) {
+          return res.status(404).json({ error: `Prompt with ID '${id}' not found` });
+        }
+        
+        // Get the prompt data before removing it
+        const promptToDelete = promptsFile.prompts[promptIndex];
+        
+        // Remove the prompt from the array
+        promptsFile.prompts.splice(promptIndex, 1);
+        
+        // Write the updated prompts.json file
+        await writeFile(PROMPTS_FILE, JSON.stringify(promptsFile, null, 2), "utf8");
+        
+        // Delete the prompt file if it exists
+        try {
+          const promptFilePath = path.join(__dirname, "..", promptToDelete.file);
+          await fs.unlink(promptFilePath);
+          log.info(`Deleted prompt file: ${promptFilePath}`);
+        } catch (fileError) {
+          log.warn(`Could not delete prompt file: ${fileError instanceof Error ? fileError.message : String(fileError)}`);
+          // Continue even if file deletion fails
+        }
+        
+        // Reload prompts and categories
+        try {
+          const result = await reloadPrompts();
+          log.info(`Reloaded ${promptsData.length} prompts and ${categories.length} categories after deleting prompt: ${id}`);
+        } catch (error) {
+          log.error("Error reloading prompts data:", error);
+          // Continue even if reload fails
+        }
+        
+        return res.status(200).json({ 
+          success: true, 
+          message: `Prompt '${promptToDelete.name}' (ID: ${id}) deleted successfully` 
+        });
+      } catch (toolError) {
+        return res.status(400).json({ error: toolError instanceof Error ? toolError.message : String(toolError) });
+      }
+    } catch (error) {
+      log.error("Error handling delete_prompt API request:", error);
+      return res.status(500).json({ 
+        error: "Internal server error", 
+        details: error instanceof Error ? error.message : String(error) 
+      });
+    }
+  });
+  
+  // API endpoint for modify_prompt_section
+  app.post("/api/v1/tools/modify_prompt_section", async (req: Request, res: Response) => {
+    try {
+      log.info("Received request to modify prompt section:", req.body);
+      
+      const { id, section_name, new_content } = req.body;
+      
+      if (!id || !section_name || !new_content) {
+        return res.status(400).json({
+          error: "Missing required fields: id, section_name, and new_content are required"
+        });
+      }
+      
+      // Read the current prompts.json file
+      const PROMPTS_FILE = path.join(__dirname, "..", config.prompts.file);
+      const fileContent = await readFile(PROMPTS_FILE, "utf8");
+      const promptsFile = JSON.parse(fileContent) as PromptsFile;
+      
+      // Find the prompt
+      const promptIndex = promptsFile.prompts.findIndex(p => p.id === id);
+      if (promptIndex === -1) {
+        log.error(`Prompt with ID '${id}' not found`);
+        return res.status(404).json({
+          error: `Prompt with ID '${id}' not found`
+        });
+      }
+      
+      const prompt = promptsFile.prompts[promptIndex];
+      
+      // Read the prompt file
+      const promptFilePath = path.join(__dirname, "..", prompt.file);
+      let promptContent: string;
+      try {
+        promptContent = await readFile(promptFilePath, "utf8");
+      } catch (error) {
+        log.error(`Error reading prompt file ${promptFilePath}:`, error);
+        return res.status(500).json({
+          error: `Failed to read prompt file: ${error instanceof Error ? error.message : String(error)}`
+        });
+      }
+      
+      // Parse the prompt sections
+      const sections: Record<string, string> = {};
+      
+      // Extract the title (first # heading)
+      const titleMatch = promptContent.match(/^# (.+?)(?=\n\n|\n##)/s);
+      if (titleMatch) {
+        sections.title = titleMatch[1].trim();
+        
+        // Extract description (content between title and first ## heading)
+        const descMatch = promptContent.match(/^# .+?\n\n([\s\S]+?)(?=\n## )/s);
+        if (descMatch) {
+          sections.description = descMatch[1].trim();
+        } else {
+          sections.description = '';
+        }
+      }
+      
+      // Extract other sections (## headings)
+      const sectionMatches = Array.from(promptContent.matchAll(/## ([^\n]+)\n\n([\s\S]+?)(?=\n## |\n# |\n$)/g));
+      for (const match of sectionMatches) {
+        const sectionName = match[1].trim();
+        const sectionContent = match[2].trim();
+        sections[sectionName] = sectionContent;
+      }
+      
+      // Check if the section exists
+      const normalizedSectionName = section_name === 'title' ? 'title' : 
+                                   section_name === 'description' ? 'description' : 
+                                   section_name === 'System Message' ? 'System Message' :
+                                   section_name === 'User Message Template' ? 'User Message Template' :
+                                   section_name;
+      
+      if (!(normalizedSectionName in sections) && 
+          normalizedSectionName !== 'description' && 
+          normalizedSectionName !== 'System Message' && 
+          normalizedSectionName !== 'User Message Template') {
+        log.error(`Section '${section_name}' not found in prompt '${id}'`);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Section '${section_name}' not found in prompt '${id}'`
+            }
+          ],
+          isError: true
+        };
+      }
+      
+      // Store the original prompt data for potential rollback
+      const originalPrompt = { ...prompt };
+      const originalContent = promptContent;
+      
+      // Create a backup of the original prompt file
+      const backupPath = `${promptFilePath}.bak`;
+      try {
+        await writeFile(backupPath, originalContent, "utf8");
+      } catch (error) {
+        log.error(`Error creating backup file ${backupPath}:`, error);
+        // Continue even if backup creation fails
+      }
+      
+      try {
+        // Modify the section
+        if (normalizedSectionName === 'title') {
+          sections.title = new_content;
+        } else if (normalizedSectionName === 'description') {
+          sections.description = new_content;
+        } else if (normalizedSectionName === 'System Message') {
+          sections['System Message'] = new_content;
+        } else if (normalizedSectionName === 'User Message Template') {
+          sections['User Message Template'] = new_content;
+        } else {
+          sections[normalizedSectionName] = new_content;
+        }
+        
+        // Reconstruct the prompt content
+        let newPromptContent = `# ${sections.title}\n\n${sections.description}\n\n`;
+        
+        // Add other sections
+        for (const [name, content] of Object.entries(sections)) {
+          if (name !== 'title' && name !== 'description') {
+            newPromptContent += `## ${name}\n\n${content}\n\n`;
+          }
+        }
+        
+        // Delete the prompt from prompts.json
+        promptsFile.prompts.splice(promptIndex, 1);
+        await writeFile(PROMPTS_FILE, JSON.stringify(promptsFile, null, 2), "utf8");
+        
+        // Delete the prompt file
+        try {
+          await fs.unlink(promptFilePath);
+          log.info(`Deleted prompt file: ${promptFilePath}`);
+        } catch (fileError) {
+          log.warn(`Could not delete prompt file: ${fileError instanceof Error ? fileError.message : String(fileError)}`);
+          // Continue even if file deletion fails
+        }
+        
+        // Create the updated prompt
+        const updatedPrompt: PromptData = {
+          ...originalPrompt,
+          name: normalizedSectionName === 'title' ? new_content : originalPrompt.name
+        };
+        
+        // Write the updated prompt file
+        await writeFile(promptFilePath, newPromptContent, "utf8");
+        
+        // Update prompts.json
+        promptsFile.prompts.push(updatedPrompt);
+        await writeFile(PROMPTS_FILE, JSON.stringify(promptsFile, null, 2), "utf8");
+        
+        // Reload prompts and categories
+        try {
+          const result = await reloadPrompts();
+          log.info(`Reloaded ${promptsData.length} prompts and ${categories.length} categories after modifying section: ${section_name}`);
+        } catch (error) {
+          log.error("Error reloading prompts data:", error);
+          // Continue even if reload fails
+        }
+        
+        return res.status(200).json({
+          success: true,
+          message: `Successfully modified section '${section_name}' in prompt '${id}'`,
+          prompt: updatedPrompt
+        });
+      } catch (error) {
+        log.error(`Error modifying prompt section, attempting rollback:`, error);
+        
+        try {
+          // Restore the original prompt file if backup exists
+          try {
+            await fs.copyFile(backupPath, promptFilePath);
+            log.info(`Restored original prompt file from backup`);
+          } catch (restoreError) {
+            log.error(`Error restoring prompt file from backup:`, restoreError);
+          }
+          
+          // Restore the prompts.json file
+          promptsFile.prompts[promptIndex] = originalPrompt;
+          await writeFile(PROMPTS_FILE, JSON.stringify(promptsFile, null, 2), "utf8");
+          log.info(`Restored original prompt entry in prompts.json`);
+          
+          // Reload prompts and categories
+          try {
+            const result = await reloadPrompts();
+            log.info(`Reloaded ${promptsData.length} prompts and ${categories.length} categories after rollback`);
+          } catch (reloadError) {
+            log.error("Error reloading prompts data after rollback:", reloadError);
+          }
+        } catch (rollbackError) {
+          log.error(`Error during rollback:`, rollbackError);
+        }
+        
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to modify prompt section: ${error instanceof Error ? error.message : String(error)}`
+            }
+          ],
+          isError: true
+        };
+      } finally {
+        // Clean up the backup file
+        try {
+          await fs.unlink(backupPath);
+        } catch (error) {
+          log.warn(`Failed to delete backup file ${backupPath}:`, error);
+        }
+      }
+    } catch (error) {
+      log.error(`Error in modify_prompt_section:`, error);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Failed to modify prompt section: ${error instanceof Error ? error.message : String(error)}`
+          }
+        ],
+        isError: true
+      };
+    }
+  }
+);
+
+  // Add API endpoint to reload prompts
+  app.post("/api/v1/tools/reload_prompts", async (req: Request, res: Response) => {
+    try {
+      log.info("API request to reload prompts");
+      
+      try {
+        const result = await reloadPrompts();
+        
+        // Replace the global convertedPrompts array with the new values
+        // This is necessary because the original array is declared with const
+        convertedPrompts.length = 0;
+        result.convertedPrompts.forEach(prompt => convertedPrompts.push(prompt));
+        
+        return res.status(200).json({
+          success: true,
+          message: `Successfully reloaded ${promptsData.length} prompts and ${categories.length} categories`,
+          data: {
+            promptsCount: promptsData.length,
+            categoriesCount: categories.length,
+            convertedPromptsCount: convertedPrompts.length
+          }
+        });
+      } catch (reloadError) {
+        return res.status(500).json({
+          error: "Failed to reload prompts",
+          details: reloadError instanceof Error ? reloadError.message : String(reloadError)
+        });
+      }
+    } catch (error) {
+      log.error("Error handling reload_prompts API request:", error);
+      return res.status(500).json({
+        error: "Internal server error",
+        details: error instanceof Error ? error.message : String(error)
+      });
+    }
   });
   
   // Create server and handle errors

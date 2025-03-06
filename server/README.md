@@ -62,6 +62,20 @@ Example configuration:
 }
 ```
 
+### Environment Variables
+
+The server also supports configuration through environment variables, which take precedence over the config file:
+
+- **PORT**: Server port number (overrides `server.port` in config.json)
+- **DEBUG**: Enable debug logging when set to any truthy value
+
+You can create a `.env` file in the server directory to set these variables:
+
+```
+PORT=9090
+DEBUG=true
+```
+
 ## Testing
 
 To verify that the server is working correctly, run:
@@ -224,3 +238,23 @@ Output Mapping:
 - Multi-step data transformations
 - Sequential decision-making processes
 - Complex reasoning tasks broken down into steps 
+```
+
+## Usage
+
+Once the server is running, you can use the following commands:
+
+- `>>listprompts` or `/listprompts` - List all available commands
+- `>>command_name [arguments]` or `/command_name [arguments]` - Execute a specific command
+
+**Note:** The double colon prefix (`>>`) is the preferred format as it's less likely to be confused with regular text. The slash prefix (`/`) is still supported for backward compatibility.
+
+For example:
+```
+>>friendly_greeting name=John
+```
+
+Or with multiple arguments in JSON format:
+```
+>>content_analysis {"text": "Your content here", "focus": "clarity"}
+``` 

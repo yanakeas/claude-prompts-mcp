@@ -200,3 +200,22 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## License
 
 MIT
+
+## Usage
+
+Once the server is running, you can use the following commands:
+
+- `>>listprompts` or `/listprompts` - List all available commands
+- `>>command_name [arguments]` or `/command_name [arguments]` - Execute a specific command
+
+**Note:** The double colon prefix (`>>`) is the preferred format as it's less likely to be confused with regular text. The slash prefix (`/`) is still supported for backward compatibility.
+
+For example:
+```
+>>friendly_greeting name=John
+```
+
+Or with multiple arguments in JSON format:
+```
+>>content_analysis {"text": "Your content here", "focus": "clarity"}
+```
