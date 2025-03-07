@@ -1,69 +1,38 @@
-# Claude Custom Prompts Documentation
+# Claude Custom Prompts Server Documentation
 
-Welcome to the documentation for the Claude Custom Prompts system. This documentation will help you understand, install, configure, and use the system effectively.
+This directory contains comprehensive documentation for the Claude Custom Prompts server.
 
-## Overview
+## Getting Started
 
-Claude Custom Prompts is a full-stack application designed to manage and serve custom prompt templates for Claude AI models. It consists of:
+- [Installation Guide](installation-guide.md) - Step-by-step instructions for installing and configuring the server
+- [Architecture](architecture.md) - Overview of the server's architecture and components
 
-1. A Node.js server that manages prompts and communicates with Claude
-2. A React-based admin UI for creating and managing prompts
-3. An API for integrating with other applications
+## Working with Prompts
 
-The system allows you to create, edit, and execute prompts with variables, as well as chain prompts together for complex workflows.
+- [Prompt Format Guide](prompt-format-guide.md) - How to create and format custom prompt templates
+- [Prompt Management](prompt-management.md) - Managing prompts and categories in the distributed configuration system
+- [Chain Execution Guide](chain-execution-guide.md) - Creating and using prompt chains
 
-## Documentation Index
+## Technical Reference
 
-### Getting Started
+- [API Endpoints Reference](api-endpoints-reference.md) - Complete reference for the server's API endpoints
+- [Index.ts Reference](index-ts-reference.md) - Documentation for the main server file
 
-- [Installation and Setup Guide](installation-guide.md) - Instructions for installing and configuring the system
-- [Quick Start Guide](prompt-management.md) - A quick introduction to using the system
+## Contributing
 
-### Core Concepts
+- [Contributing Guide](contributing.md) - Guidelines for contributing to the project
 
-- [Prompt Format Guide](prompt-format-guide.md) - Detailed explanation of the prompt format and structure
-- [Chain Execution Guide](chain-execution-guide.md) - How to create and use chain prompts
+## Features
 
-### Reference
+The Claude Custom Prompts server includes the following features:
 
-- [API Endpoints Reference](api-endpoints-reference.md) - Complete reference for all API endpoints
-- [Index.ts Reference](index-ts-reference.md) - Detailed documentation of the server's main file
+- 🚀 Easy integration with Claude using MCP
+- 📝 Define custom prompt templates using Markdown files 
+- 🧩 Support for prompt arguments with validation
+- 📚 Organized prompt categories for better management
+- 🔄 Multiple transport options (SSE and STDIO)
+- 🔄 Special context placeholders for accessing conversation history
+- ⛓️ Support for prompt chains to break complex tasks into steps
+- 📂 Distributed prompts configuration with category-specific files
 
-### Development
-
-- [Contributing Guidelines](contributing.md) - How to contribute to the project
-- [Architecture Overview](architecture.md) - Overview of the system architecture
-
-## Key Features
-
-- **Custom Prompts**: Create and manage prompts with variables
-- **Chain Prompts**: Build complex workflows by chaining prompts together
-- **Admin UI**: User-friendly interface for managing prompts
-- **API**: Integrate with other applications
-- **Logging**: Comprehensive logging for debugging and monitoring
-
-## System Requirements
-
-- Node.js v14 or later
-- npm v6 or later
-- 2GB RAM minimum
-- 500MB disk space minimum
-
-## Quick Links
-
-- [Server Configuration](installation-guide.md#server-configuration)
-- [Admin UI Configuration](installation-guide.md#admin-ui-configuration)
-- [Creating Your First Prompt](installation-guide.md#creating-your-first-prompt)
-- [Troubleshooting](installation-guide.md#troubleshooting)
-
-## Support
-
-If you encounter issues or have questions:
-
-1. Check the documentation in this directory
-2. Look for error messages in the server logs
-3. Contact the maintainers or community for support
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details. 
+For a quick overview, see the [main README](../README.md) in the project root. 

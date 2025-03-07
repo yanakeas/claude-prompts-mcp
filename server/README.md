@@ -4,10 +4,8 @@ This is a Model Context Protocol (MCP) server that provides a flexible, template
 
 ## Recent Fixes and Improvements
 
-- **Transport Configuration Fixed**: Updated the transport initialization logic to use the latest MCP SDK API (v1.6.1+). Now properly creates and connects transport instances using `server.connect()` instead of the deprecated direct transport methods.
 - **Enhanced Error Handling**: Added comprehensive error handling for transport configuration, ensuring the server continues operating if one transport fails.
 - **Test Script Added**: Included a test script that validates server startup, prompt loading, and transport configuration.
-- **Server Port Corrected**: Fixed the server port in the configuration file (from 90901 to 9090).
 
 ## Prerequisites
 
@@ -47,7 +45,7 @@ Example configuration:
     "port": 9090
   },
   "prompts": {
-    "file": "prompts.json",
+    "file": "promptsConfig.json",
     "registrationMode": "name"
   },
   "transports": {

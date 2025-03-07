@@ -2,9 +2,21 @@
 
 This document explains the format and structure of prompts in the Claude Custom Prompts server.
 
+## Prompt Configuration System
+
+Prompts are organized in a distributed configuration system:
+
+1. **promptsConfig.json**: The main configuration file that defines categories and imports
+2. **Category-specific prompts.json files**: Each category has its own prompts.json file
+3. **Markdown template files**: The actual prompt templates are stored as markdown files
+
+### Configuration Structure
+
+For a complete explanation of the configuration structure, see the [Prompt Management](prompt-management.md) documentation.
+
 ## Prompt File Structure
 
-Prompts are stored as markdown files with a specific structure. Each prompt file must include certain sections, and may optionally include others.
+Prompt templates are stored as markdown files with a specific structure. Each prompt file must include certain sections, and may optionally include others.
 
 ### Basic Structure
 
@@ -36,34 +48,42 @@ Template for the user message with {{placeholders}}.
 ### Optional Sections
 
 1. **System Message** (Level 2 Heading): Instructions for Claude's behavior
-2. **Arguments** (Level 2 Heading): Definitions of arguments used in the template
-3. **Chain Steps** (Level 2 Heading): For chain prompts, defines the steps in the chain
+2. **Chain Steps** (Level 2 Heading): For chain prompts, defines the steps in the chain
 
 ## Placeholders and Arguments
 
 Placeholders in templates are denoted by double curly braces: `{{argument_name}}`.
 
-### Argument Definition
+### Argument Registration
 
-Arguments are defined in the Arguments section as a list:
+Arguments are defined in the category's prompts.json file for each prompt:
 
-```markdown
-## Arguments
-
-- argument_name: Description of the argument
-- another_argument: Description of another argument (optional)
+```json
+{
+  "prompts": [
+    {
+      "id": "friendly_greeting",
+      "name": "Friendly Greeting",
+      "category": "general",
+      "description": "A warm, personalized greeting that makes the user feel welcome and valued.",
+      "file": "friendly_greeting.md",
+      "arguments": [
+        {
+          "name": "name",
+          "description": "The name of the person to greet",
+          "required": false
+        }
+      ]
+    }
+  ]
+}
 ```
 
-Each argument can be marked as required or optional in its description.
+Each argument has the following properties:
 
-### Special Placeholders
-
-The system supports several special placeholders:
-
-- `{{previous_message}}`: Inserts the previous message from the conversation
-- `{{conversation_history}}`: Inserts the entire conversation history
-- `{{current_date}}`: Inserts the current date
-- `{{current_time}}`: Inserts the current time
+- `name`: The name of the argument, used in placeholders
+- `description`: Description of the argument's purpose
+- `required`: Whether the argument is required (boolean)
 
 ## Example Prompt
 

@@ -1,6 +1,6 @@
-# Claude Custom Prompts Server [WIP]
+# Claude Custom Prompts Server
 
-A Node.js server implementing the Model Context Protocol (MCP) for Claude AI models, allowing you to define and use custom prompt templates.
+A Node.js server implementing the Model Context Protocol (MCP) for Claude AI models, allowing you to define and use custom prompt templates with a modular, category-based organization system.
 
 ## Features
 
@@ -11,15 +11,9 @@ A Node.js server implementing the Model Context Protocol (MCP) for Claude AI mod
 - 🔄 Multiple transport options (SSE and STDIO)
 - 🔄 Special context placeholders for accessing conversation history
 - ⛓️ Support for prompt chains to break complex tasks into steps
+- 📂 Distributed prompts configuration with category-specific files
 
-## TODO
-
-- [ ] Add functionality to modify the prompt library with different tool commands directly within the MCP client
-- [ ] Add more comprehensive testing
-- [ ] Create a simple web UI for managing prompts
-- [ ] Import my entire Prompt Library
-
-## Setup
+## Quick Start
 
 ### Prerequisites
 
@@ -28,41 +22,59 @@ A Node.js server implementing the Model Context Protocol (MCP) for Claude AI mod
 
 ### Installation
 
-1. Clone this repository:
-   ```bash
-   git clone https://github.com/yourusername/claude-prompts.git
-   cd claude-prompts
-   ```
-
-2. Navigate to the server directory:
-   ```bash
-   cd server
-   ```
-
-3. Install dependencies:
-   ```bash
-   npm install
-   ```
-4. Build index.js: 
-    ```bash
-    npm run build
-    ```
-
-## Starting the Server
-
-### Using npm scripts
-
 ```bash
-npm start          # Start with default transport
-npm run start:sse  # Start with SSE transport
-npm run start:stdio # Start with STDIO transport
+# Clone the repository
+git clone https://github.com/yourusername/claude-prompts.git
+cd claude-prompts
+
+# Install dependencies and build the server
+cd server
+npm install
+npm run build
+
+# Start the server
+npm start
 ```
 
-### Using direct command
+### Basic Usage
 
-```bash
-node dist/index.js --transport=sse
+Once the server is running, you can use your custom prompts in Claude Desktop by typing:
+
 ```
+>>command_name argument1 argument2
+```
+
+For example:
+```
+>>friendly_greeting name=John
+```
+
+For chain prompts:
+```
+>>content_analysis_chain text="Your content here" focus="clarity"
+```
+
+## Documentation
+
+For more detailed information, please see the documentation in the `docs` folder:
+
+- [Installation Guide](server/docs/installation-guide.md) - Detailed setup instructions and configuration
+- [Prompt Format Guide](server/docs/prompt-format-guide.md) - How to create and format prompt templates
+- [Chain Execution Guide](server/docs/chain-execution-guide.md) - Creating and using prompt chains
+- [Prompt Management](server/docs/prompt-management.md) - Managing prompts and categories
+- [Architecture](server/docs/architecture.md) - System architecture and internals
+- [API Endpoints Reference](server/docs/api-endpoints-reference.md) - Available API endpoints
+- [Contributing Guide](server/docs/contributing.md) - How to contribute to this project
+
+## TODO
+
+- [ ] Add functionality to modify the prompt library with different tool commands directly within the MCP client
+- [ ] Add more comprehensive testing
+- [ ] Create a simple web UI for managing prompts
+
+## License
+
+MIT
 
 ## Working Directory Considerations
 
@@ -74,8 +86,8 @@ The server relies heavily on the working directory to locate and load files. Und
 - All file paths in the code are constructed relative to this directory using `path.join(__dirname, "..", ...)`
 - Key files that must be accessible from the working directory:
   - `config.json` - Server configuration
-  - `prompts.json` - Prompt definitions
-  - `prompts/` directory - Contains all prompt template files
+  - `promptsConfig.json` - Main prompt configuration and category imports
+  - `prompts/` directory - Contains all category folders and prompt template files
   - `server.log` - Log file (created automatically)
 
 ### Setting the Working Directory
@@ -112,7 +124,7 @@ These commands can be used directly through the Claude interface once the MCP se
 The server uses two main configuration files:
 
 1. `config.json` - Server configuration (created automatically if not present)
-2. `prompts.json` - Custom prompt templates
+2. `promptsConfig.json` - Main configuration for prompts categories and imports
 
 #### Server Configuration (config.json)
 
@@ -124,7 +136,7 @@ The server uses two main configuration files:
     "port": 9090
   },
   "prompts": {
-    "file": "prompts.json",
+    "file": "promptsConfig.json",
     "registrationMode": "name"
   },
   "transports": {
@@ -135,23 +147,85 @@ The server uses two main configuration files:
 }
 ```
 
-You can modify this file to change these settings.
+You can modify this file to change these settings. Note that the `prompts.file` property now points to `promptsConfig.json`.
 
-#### Prompt Templates (prompts.json)
+#### Prompts Configuration (promptsConfig.json)
 
-This file defines the custom prompt templates available through the server. Each template includes:
-- `id`: Unique identifier for the prompt
-- `name`: Human-readable name
-- `category`: Category for organization
-- `description`: Description of what the prompt does
-- `file`: Path to the markdown file containing the prompt template
-- `arguments`: Expected arguments for the prompt
+This file defines the categories and imports category-specific prompt files:
+
+```json
+{
+  "categories": [
+    {
+      "id": "general",
+      "name": "General",
+      "description": "General-purpose prompts for everyday tasks"
+    },
+    {
+      "id": "code",
+      "name": "Code",
+      "description": "Prompts related to programming and software development"
+    },
+    ...
+  ],
+  "imports": [
+    "prompts/general/prompts.json",
+    "prompts/code/prompts.json",
+    "prompts/analysis/prompts.json",
+    ...
+  ]
+}
+```
+
+The `categories` array defines all available prompt categories, and the `imports` array specifies the paths to category-specific prompt files.
+
+#### Category-Specific Prompt Files
+
+Each category has its own prompts.json file in its directory (e.g., `prompts/general/prompts.json`):
+
+```json
+{
+  "prompts": [
+    {
+      "id": "friendly_greeting",
+      "name": "Friendly Greeting",
+      "category": "general",
+      "description": "A warm, personalized greeting that makes the user feel welcome and valued.",
+      "file": "friendly_greeting.md",
+      "arguments": [
+        {
+          "name": "name",
+          "description": "The name of the person to greet",
+          "required": false
+        }
+      ]
+    },
+    ...
+  ]
+}
+```
+
+The `file` property in each prompt definition is relative to the category folder.
 
 ## Creating Custom Prompts
 
+### Adding a New Prompt to an Existing Category
+
 1. Create a new markdown file in the appropriate category folder (e.g., `prompts/general/my_prompt.md`)
 2. Add the prompt template to the file using markdown format
-3. Register the prompt in `prompts.json` with appropriate metadata
+3. Register the prompt in the category's prompts.json file (e.g., `prompts/general/prompts.json`)
+
+### Creating a New Category
+
+1. Create a new folder in the `prompts` directory for your category (e.g., `prompts/mycategory/`)
+2. Create a `prompts.json` file in the new category folder with the following structure:
+   ```json
+   {
+     "prompts": []
+   }
+   ```
+3. Add your category to the `categories` array in `promptsConfig.json`
+4. Add the path to your category's prompts.json file to the `imports` array in `promptsConfig.json`
 
 ### Special Placeholders
 
@@ -242,7 +316,7 @@ The chain executes each step in sequence, with outputs from earlier steps availa
 
 If your chain prompt isn't working as expected:
 
-1. Check that all prompt IDs in the chain steps exist in your prompts.json file
+1. Check that all prompt IDs in the chain steps exist in your category prompts.json files
 2. Verify that the input and output mappings match the expected inputs and outputs of each prompt
 3. Test each individual prompt in the chain to ensure it works correctly on its own
 4. Look for error messages in the server logs related to chain execution
@@ -364,7 +438,7 @@ For chain prompts:
 - Ensure the server is running on the expected port
 - Check that the paths in your Claude Desktop config.json are correct
 - Verify that the `cwd` parameter points to the correct server directory
-- Make sure the `prompts.json` file exists and is valid JSON
+- Make sure the `promptsConfig.json` file and category prompts.json files exist and are valid JSON
 
 ### JSON Parsing Errors
 

@@ -53,16 +53,19 @@ The server configuration is stored in `server/config.json`. You can modify this 
 
 ```json
 {
-  "name": "Claude Custom Prompts",
-  "version": "1.0.0",
-  "port": 9090,
-  "prompts": {
-    "file": "prompts.json",
-    "registration": "name"
+  "server": {
+    "name": "Claude Custom Prompts",
+    "version": "1.0.0",
+    "port": 9090
   },
-  "transport": {
-    "stdio": true,
-    "sse": false
+  "prompts": {
+    "file": "promptsConfig.json",
+    "registrationMode": "name"
+  },
+  "transports": {
+    "default": "stdio",
+    "sse": { "enabled": false },
+    "stdio": { "enabled": true }
   },
   "logging": {
     "directory": "./logs",
@@ -73,10 +76,46 @@ The server configuration is stored in `server/config.json`. You can modify this 
 
 Key configuration options:
 
-- **port**: The port on which the server will run (default: 9090)
-- **prompts.file**: The file where prompts are stored (default: prompts.json)
+- **server.port**: The port on which the server will run (default: 9090)
+- **prompts.file**: The main prompts configuration file (default: promptsConfig.json)
+- **prompts.registrationMode**: How prompts are registered with the MCP server (options: id, name, both)
+- **transports.default**: The default transport to use (options: stdio, sse)
+- **transports.stdio.enabled**: Whether the stdio transport is enabled
+- **transports.sse.enabled**: Whether the SSE transport is enabled
 - **logging.directory**: The directory where logs will be stored (default: ./logs)
 - **logging.level**: The logging level (options: debug, info, warn, error)
+
+### Prompts Configuration
+
+The prompts configuration is distributed across multiple files:
+
+1. **promptsConfig.json**: The main configuration file that defines categories and imports category-specific prompts.json files
+2. **Category-specific prompts.json files**: Each category has its own prompts.json file in its directory
+
+#### Main Configuration (promptsConfig.json)
+
+```json
+{
+  "categories": [
+    {
+      "id": "general",
+      "name": "General",
+      "description": "General-purpose prompts for everyday tasks"
+    },
+    {
+      "id": "code",
+      "name": "Code",
+      "description": "Prompts related to programming and software development"
+    }
+  ],
+  "imports": [
+    "prompts/general/prompts.json",
+    "prompts/code/prompts.json"
+  ]
+}
+```
+
+For more details on managing prompts, see the [Prompt Management](prompt-management.md) documentation.
 
 ### Admin UI Configuration
 
