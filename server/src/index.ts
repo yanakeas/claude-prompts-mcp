@@ -1752,9 +1752,10 @@ server.tool(
   {
     id: z.string().describe("Unique identifier of the prompt to modify"),
     section_name: z.string().describe("Name of the section to modify (valid values: 'title', 'description', 'System Message', 'User Message Template', or any custom section)"),
-    new_content: z.string().describe("New content for the specified section")
+    new_content: z.string().describe("New content for the specified section"),
+    restartServer: z.boolean().optional().describe("Whether to restart the server after modifying the prompt section")
   },
-  async (args: { id: string; section_name: string; new_content: string }) => {
+  async (args) => {
     try {
       log.info(`Attempting to modify section '${args.section_name}' of prompt '${args.id}'`);
       
@@ -1770,20 +1771,45 @@ server.tool(
           PROMPTS_FILE
         );
         
-        // Make a request to the reload_prompts API endpoint
+        if (!result.success) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: result.message
+              }
+            ],
+            isError: true
+          };
+        }
+        
+        // Make a request to the reload_prompts API endpoint with restart option if specified
         try {
-          await triggerServerRefresh();
-          log.info(`Triggered server refresh after modifying section: ${args.section_name}`);
+          await triggerServerRefresh(args.restartServer || false, `Section modified: ${args.section_name} in prompt: ${args.id}`);
+          log.info(`Triggered server refresh${args.restartServer ? ' with restart' : ''} after modifying section: ${args.section_name}`);
         } catch (refreshError) {
           log.error(`Error refreshing server after modifying section: ${args.section_name}`, refreshError);
           // Continue even if refresh fails
         }
         
+        // If restart is requested, provide appropriate response
+        if (args.restartServer) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: `${result.message}\n\nRestarting server as requested...`
+              }
+            ]
+          };
+        }
+        
+        // Normal response without restart
         return {
           content: [
             {
-              type: "text",
-              text: result
+              type: "text" as const,
+              text: `${result.message}\n\nIf you need this change to take effect immediately, you may need to restart the server with the reload_prompts tool.`
             }
           ]
         };
@@ -1792,7 +1818,7 @@ server.tool(
         return {
           content: [
             {
-              type: "text",
+              type: "text" as const,
               text: `Failed to modify prompt section: ${error instanceof Error ? error.message : String(error)}`
             }
           ],
@@ -1801,16 +1827,16 @@ server.tool(
       }
     } catch (error) {
       log.error(`Error in modify_prompt_section:`, error);
-        return {
-          content: [
-            {
-              type: "text",
+      return {
+        content: [
+          {
+            type: "text" as const,
             text: `Failed to modify prompt section: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
+          }
+        ],
+        isError: true
+      };
+    }
   }
 );
 
@@ -2667,226 +2693,72 @@ if (transport === "stdio") {
     try {
       log.info("Received request to modify prompt section:", req.body);
       
-      const { id, section_name, new_content } = req.body;
+      const { id, section_name, new_content, restartServer } = req.body;
       
       if (!id || !section_name || !new_content) {
         return res.status(400).json({
-          error: "Missing required fields: id, section_name, and new_content are required"
+          success: false,
+          message: "Missing required fields: id, section_name, and new_content are required"
         });
       }
       
       // Read the current prompts.json file
       const PROMPTS_FILE = path.join(__dirname, "..", config.prompts.file);
-      const fileContent = await readFile(PROMPTS_FILE, "utf8");
-      const promptsFile = JSON.parse(fileContent) as PromptsFile;
-      
-      // Find the prompt
-      const promptIndex = promptsFile.prompts.findIndex(p => p.id === id);
-      if (promptIndex === -1) {
-        log.error(`Prompt with ID '${id}' not found`);
-        return res.status(404).json({
-          error: `Prompt with ID '${id}' not found`
-        });
-      }
-      
-      const prompt = promptsFile.prompts[promptIndex];
-      
-      // Read the prompt file
-      const promptFilePath = path.join(__dirname, "..", prompt.file);
-      let promptContent: string;
-      try {
-        promptContent = await readFile(promptFilePath, "utf8");
-      } catch (error) {
-        log.error(`Error reading prompt file ${promptFilePath}:`, error);
-        return res.status(500).json({
-          error: `Failed to read prompt file: ${error instanceof Error ? error.message : String(error)}`
-        });
-      }
-      
-      // Parse the prompt sections
-      const sections: Record<string, string> = {};
-      
-      // Extract the title (first # heading)
-      const titleMatch = promptContent.match(/^# (.+?)(?=\n\n|\n##)/s);
-      if (titleMatch) {
-        sections.title = titleMatch[1].trim();
-        
-        // Extract description (content between title and first ## heading)
-        const descMatch = promptContent.match(/^# .+?\n\n([\s\S]+?)(?=\n## )/s);
-        if (descMatch) {
-          sections.description = descMatch[1].trim();
-        } else {
-          sections.description = '';
-        }
-      }
-      
-      // Extract other sections (## headings)
-      const sectionMatches = Array.from(promptContent.matchAll(/## ([^\n]+)\n\n([\s\S]+?)(?=\n## |\n# |\n$)/g));
-      for (const match of sectionMatches) {
-        const sectionName = match[1].trim();
-        const sectionContent = match[2].trim();
-        sections[sectionName] = sectionContent;
-      }
-      
-      // Check if the section exists
-      const normalizedSectionName = section_name === 'title' ? 'title' : 
-                                   section_name === 'description' ? 'description' : 
-                                   section_name === 'System Message' ? 'System Message' :
-                                   section_name === 'User Message Template' ? 'User Message Template' :
-                                   section_name;
-      
-      if (!(normalizedSectionName in sections) && 
-          normalizedSectionName !== 'description' && 
-          normalizedSectionName !== 'System Message' && 
-          normalizedSectionName !== 'User Message Template') {
-        log.error(`Section '${section_name}' not found in prompt '${id}'`);
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Section '${section_name}' not found in prompt '${id}'`
-            }
-          ],
-          isError: true
-        };
-      }
-      
-      // Store the original prompt data for potential rollback
-      const originalPrompt = { ...prompt };
-      const originalContent = promptContent;
-      
-      // Create a backup of the original prompt file
-      const backupPath = `${promptFilePath}.bak`;
-      try {
-        await writeFile(backupPath, originalContent, "utf8");
-      } catch (error) {
-        log.error(`Error creating backup file ${backupPath}:`, error);
-        // Continue even if backup creation fails
-      }
       
       try {
-        // Modify the section
-        if (normalizedSectionName === 'title') {
-          sections.title = new_content;
-        } else if (normalizedSectionName === 'description') {
-          sections.description = new_content;
-        } else if (normalizedSectionName === 'System Message') {
-          sections['System Message'] = new_content;
-        } else if (normalizedSectionName === 'User Message Template') {
-          sections['User Message Template'] = new_content;
-        } else {
-          sections[normalizedSectionName] = new_content;
+        // Use the modifyPromptSection function from promptUtils
+        const result = await modifyPromptSection(
+          id,
+          section_name,
+          new_content,
+          PROMPTS_FILE
+        );
+        
+        if (!result.success) {
+          return res.status(404).json({
+            success: false,
+            message: result.message
+          });
         }
         
-        // Reconstruct the prompt content
-        let newPromptContent = `# ${sections.title}\n\n${sections.description}\n\n`;
-        
-        // Add other sections
-        for (const [name, content] of Object.entries(sections)) {
-          if (name !== 'title' && name !== 'description') {
-            newPromptContent += `## ${name}\n\n${content}\n\n`;
-          }
-        }
-        
-        // Delete the prompt from prompts.json
-        promptsFile.prompts.splice(promptIndex, 1);
-        await writeFile(PROMPTS_FILE, JSON.stringify(promptsFile, null, 2), "utf8");
-        
-        // Delete the prompt file
+        // Make a request to the reload_prompts API endpoint with restart option if specified
         try {
-          await fs.unlink(promptFilePath);
-          log.info(`Deleted prompt file: ${promptFilePath}`);
-        } catch (fileError) {
-          log.warn(`Could not delete prompt file: ${fileError instanceof Error ? fileError.message : String(fileError)}`);
-          // Continue even if file deletion fails
-        }
-        
-        // Create the updated prompt
-        const updatedPrompt: PromptData = {
-          ...originalPrompt,
-          name: normalizedSectionName === 'title' ? new_content : originalPrompt.name
-        };
-        
-        // Write the updated prompt file
-        await writeFile(promptFilePath, newPromptContent, "utf8");
-        
-        // Update prompts.json
-        promptsFile.prompts.push(updatedPrompt);
-        await writeFile(PROMPTS_FILE, JSON.stringify(promptsFile, null, 2), "utf8");
-        
-        // Make a request to the reload_prompts API endpoint
-        try {
-          await triggerServerRefresh();
-          log.info(`Triggered server refresh after modifying section: ${section_name}`);
+          await triggerServerRefresh(restartServer || false, `Section modified: ${section_name} in prompt: ${id}`);
+          log.info(`Triggered server refresh${restartServer ? ' with restart' : ''} after modifying section: ${section_name}`);
         } catch (refreshError) {
           log.error(`Error refreshing server after modifying section: ${section_name}`, refreshError);
           // Continue even if refresh fails
         }
         
+        // If restart is requested, provide appropriate response
+        if (restartServer) {
+          return res.status(200).json({
+            success: true,
+            message: `${result}. Server is now restarting.`,
+            restarting: true
+          });
+        }
+        
+        // Normal response without restart
         return res.status(200).json({
           success: true,
-          message: `Successfully modified section '${section_name}' in prompt '${id}'`,
-          prompt: updatedPrompt
+          message: result
         });
       } catch (error) {
-        log.error(`Error modifying prompt section, attempting rollback:`, error);
-        
-        try {
-          // Restore the original prompt file if backup exists
-          try {
-            await fs.copyFile(backupPath, promptFilePath);
-            log.info(`Restored original prompt file from backup`);
-          } catch (restoreError) {
-            log.error(`Error restoring prompt file from backup:`, restoreError);
-          }
-          
-          // Restore the prompts.json file
-          promptsFile.prompts[promptIndex] = originalPrompt;
-          await writeFile(PROMPTS_FILE, JSON.stringify(promptsFile, null, 2), "utf8");
-          log.info(`Restored original prompt entry in prompts.json`);
-          
-          // Make a request to the reload_prompts API endpoint
-          try {
-            await triggerServerRefresh();
-            log.info(`Triggered server refresh after rollback`);
-          } catch (rollbackError) {
-            log.error(`Error refreshing server after rollback:`, rollbackError);
-          }
-        } catch (rollbackError) {
-          log.error(`Error during rollback:`, rollbackError);
-        }
-        
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Failed to modify prompt section: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      } finally {
-        // Clean up the backup file
-        try {
-          await fs.unlink(backupPath);
-        } catch (error) {
-          log.warn(`Failed to delete backup file ${backupPath}:`, error);
-        }
+        log.error(`Error in modify_prompt_section:`, error);
+        return res.status(500).json({
+          success: false,
+          message: `Failed to modify prompt section: ${error instanceof Error ? error.message : String(error)}`
+        });
       }
     } catch (error) {
-      log.error(`Error in modify_prompt_section:`, error);
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Failed to modify prompt section: ${error instanceof Error ? error.message : String(error)}`
-          }
-        ],
-        isError: true
-      };
+      log.error("Error handling modify_prompt_section API request:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error"
+      });
     }
-  }
-);
+  });
 
   // Add API endpoint to reload prompts
   app.post("/api/v1/tools/reload_prompts", async (req: Request, res: Response) => {

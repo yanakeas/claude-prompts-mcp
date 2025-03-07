@@ -536,6 +536,7 @@ The server provides several built-in tools to manage prompts and control server 
   - `id` (required): Unique identifier of the prompt to modify
   - `section_name` (required): Name of the section to modify (e.g., "title", "description", "System Message", "User Message Template")
   - `new_content` (required): New content for the specified section
+  - `restartServer` (optional): Whether to restart the server after modifying the prompt section
 
 ### Server Management Tools
 

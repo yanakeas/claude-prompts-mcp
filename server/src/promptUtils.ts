@@ -87,19 +87,24 @@ export function parsePromptSections(content: string): Record<string, string> {
 }
 
 /**
- * Modifies a section of a prompt
- * @param promptId The ID of the prompt to modify
- * @param sectionName The name of the section to modify
- * @param newContent The new content for the section
+ * Modifies a specific section of a prompt markdown file
+ * @param promptId Unique identifier of the prompt to modify
+ * @param sectionName Name of the section to modify (e.g., "title", "description", "System Message", "User Message Template")
+ * @param newContent New content for the specified section
  * @param configPath Path to the promptsConfig.json file
- * @returns A message indicating success or failure
+ * @returns Object containing the result of the operation
  */
 export async function modifyPromptSection(
   promptId: string,
   sectionName: string,
   newContent: string,
   configPath: string
-): Promise<string> {
+): Promise<{ 
+  success: boolean; 
+  message: string; 
+  promptData?: PromptData;
+  filePath?: string;
+}> {
   try {
     // Read the promptsConfig.json file
     const configFilePath = path.resolve(configPath);
@@ -149,7 +154,10 @@ export async function modifyPromptSection(
     
     // If prompt not found, throw an error
     if (!prompt) {
-      throw new Error(`Prompt with ID '${promptId}' not found in any category file`);
+      return {
+        success: false,
+        message: `Prompt with ID '${promptId}' not found in any category file`
+      };
     }
     
     // Determine the category folder path
@@ -166,7 +174,10 @@ export async function modifyPromptSection(
     
     // Check if the section exists
     if (!(sectionName in sections) && sectionName !== 'description') {
-      throw new Error(`Section '${sectionName}' not found in prompt '${promptId}'`);
+      return {
+        success: false,
+        message: `Section '${sectionName}' not found in prompt '${promptId}'`
+      };
     }
     
     // Store the original prompt data for potential rollback
@@ -192,11 +203,11 @@ export async function modifyPromptSection(
       }
     }
       
-      // Create the updated prompt
-      const updatedPrompt: PromptData = {
-        ...originalPrompt,
-        name: sectionName === 'title' ? newContent : originalPrompt.name
-      };
+    // Create the updated prompt
+    const updatedPrompt: PromptData = {
+      ...originalPrompt,
+      name: sectionName === 'title' ? newContent : originalPrompt.name
+    };
       
     // Create a copy of the prompts file with the prompt removed
     const updatedPromptsFile = {
@@ -228,10 +239,18 @@ export async function modifyPromptSection(
     // Perform the operations as a transaction
     await performTransactionalFileOperations(operations, rollbacks);
       
-      return `Successfully modified section '${sectionName}' in prompt '${promptId}'`;
-    } catch (error) {
+    return {
+      success: true,
+      message: `Successfully modified section '${sectionName}' in prompt '${promptId}'`,
+      promptData: updatedPrompt,
+      filePath: promptFilePath
+    };
+  } catch (error) {
     log.error(`Error in modifyPromptSection:`, error);
-    throw new Error(`Failed to modify prompt section: ${error instanceof Error ? error.message : String(error)}`);
+    return {
+      success: false,
+      message: `Failed to modify prompt section: ${error instanceof Error ? error.message : String(error)}`
+    };
   }
 }
 
@@ -340,13 +359,55 @@ export async function safeWriteFile(filePath: string, content: string, encoding:
 }
 
 /**
- * Searches for and deletes a prompt markdown file by prompt ID
- * This function will look in all category folders for a file matching the prompt ID
- * @param promptId The ID of the prompt whose markdown file to delete
- * @param baseDir The base directory where prompt categories are stored
- * @returns An object indicating whether the file was found and deleted, and any error message
+ * Finds and deletes a prompt file
+ * @param promptId Unique identifier of the prompt to delete
+ * @param baseDir Base directory to search in (usually the prompts directory)
+ * @returns Object containing information about the deletion
  */
-export async function findAndDeletePromptFile(promptId: string, baseDir: string): Promise<{ found: boolean; deleted: boolean; path?: string; error?: string }> {
+export async function findAndDeletePromptFile(promptId: string, baseDir: string): Promise<{ 
+  found: boolean; 
+  deleted: boolean; 
+  path?: string; 
+  error?: string 
+}> {
+  try {
+    // First, find the prompt file
+    const findResult = await findPromptFile(promptId, baseDir);
+    
+    // If the file wasn't found, return the result
+    if (!findResult.found) {
+      return { found: false, deleted: false };
+    }
+    
+    // Try to delete the file
+    try {
+      await fs.unlink(findResult.path!);
+      log.info(`Successfully deleted markdown file: ${findResult.path}`);
+      return { found: true, deleted: true, path: findResult.path };
+    } catch (deleteError) {
+      const errorMessage = `Error deleting file at ${findResult.path}: ${deleteError instanceof Error ? deleteError.message : String(deleteError)}`;
+      log.error(errorMessage);
+      return { found: true, deleted: false, path: findResult.path, error: errorMessage };
+    }
+  } catch (error) {
+    const errorMessage = `Error finding and deleting prompt file: ${error instanceof Error ? error.message : String(error)}`;
+    log.error(errorMessage);
+    return { found: false, deleted: false, error: errorMessage };
+  }
+}
+
+/**
+ * Checks if a prompt file exists and returns its path
+ * @param promptId Unique identifier of the prompt to find
+ * @param baseDir Base directory to search in (usually the prompts directory)
+ * @returns Object containing information about the prompt file
+ */
+export async function findPromptFile(promptId: string, baseDir: string): Promise<{ 
+  found: boolean; 
+  path?: string; 
+  category?: string;
+  error?: string 
+}> {
   try {
     // Get all category directories
     const categoryDirs = await fs.readdir(baseDir, { withFileTypes: true });
@@ -377,17 +438,7 @@ export async function findAndDeletePromptFile(promptId: string, baseDir: string)
           if (files.includes(filename)) {
             const filePath = path.join(categoryPath, filename);
             log.info(`Found markdown file at: ${filePath}`);
-            
-            // Try to delete the file
-            try {
-              await fs.unlink(filePath);
-              log.info(`Successfully deleted markdown file: ${filePath}`);
-              return { found: true, deleted: true, path: filePath };
-            } catch (deleteError) {
-              const errorMessage = `Error deleting file at ${filePath}: ${deleteError instanceof Error ? deleteError.message : String(deleteError)}`;
-              log.error(errorMessage);
-              return { found: true, deleted: false, path: filePath, error: errorMessage };
-            }
+            return { found: true, path: filePath, category };
           }
         }
       } catch (readError) {
@@ -397,10 +448,10 @@ export async function findAndDeletePromptFile(promptId: string, baseDir: string)
     }
     
     log.warn(`Could not find markdown file for prompt '${promptId}' in any category folder`);
-    return { found: false, deleted: false };
+    return { found: false };
   } catch (error) {
     const errorMessage = `Error searching for prompt file: ${error instanceof Error ? error.message : String(error)}`;
     log.error(errorMessage);
-    return { found: false, deleted: false, error: errorMessage };
+    return { found: false, error: errorMessage };
   }
 } 
