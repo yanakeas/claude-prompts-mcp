@@ -44,8 +44,19 @@
       "id": "obsidian",
       "name": "Obsidian",
       "description": "Prompts related to Obsidian"
+    },
+    {
+      "id": "documentation",
+      "name": "Documentation",
+      "description": "Prompts related to Documentation"
+    },
+    {
+      "id": "writing",
+      "name": "Writing",
+      "description": "Prompts related to writing and content creation"
     }
   ],
+  "prompts": [],
   "imports": [
     "prompts/general/prompts.json",
     "prompts/code/prompts.json",
@@ -55,6 +66,8 @@
     "prompts/research/prompts.json",
     "prompts/research-tools/prompts.json",
     "prompts/testing/prompts.json",
-    "prompts/obsidian/prompts.json"
+    "prompts/obsidian/prompts.json",
+    "prompts/documentation/prompts.json",
+    "prompts/writing/prompts.json"
   ]
-} 
+}

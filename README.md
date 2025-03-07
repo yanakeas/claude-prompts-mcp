@@ -381,7 +381,6 @@ To add the MCP server to your Claude Desktop, follow these steps:
     "env": {
       "PORT": "9090"
     },
-    "autostart": true
   }
 }
 ```
@@ -396,21 +395,6 @@ Notes:
 - You can specify environment variables like `PORT` in the `env` object
 
 3. You can also specify the transport method by adding it to the args array:
-
-```json
-"mcp_servers": {
-  "claude-prompts": {
-    "command": "node",
-    "args": [
-      "C:\\path\\to\\claude-prompts\\server\\dist\\index.js",
-      "--transport=stdio"
-    ],
-    "env": {
-      "PORT": "9090"
-    },
-  }
-}
-```
 
 4. After saving the configuration, restart Claude Desktop to apply the changes.
 
@@ -506,4 +490,170 @@ For example:
 Or with multiple arguments in JSON format:
 ```
 >>content_analysis {"text": "Your content here", "focus": "clarity"}
+```
+
+## Available Tools
+
+The server provides several built-in tools to manage prompts and control server behavior. These tools can be accessed via API endpoints or through the Claude interface.
+
+### Prompt Management Tools
+
+- **listprompts**: Displays a formatted list of all available commands and their usage
+  ```
+  /listprompts [filter_text]
+  ```
+  - Optional `filter_text` parameter to show only commands matching the filter
+
+- **update_prompt**: Creates or updates a prompt
+  ```
+  POST /api/v1/tools/update_prompt
+  ```
+  Parameters:
+  - `id` (required): Unique identifier for the prompt
+  - `name` (required): Display name for the prompt
+  - `category` (required): Category this prompt belongs to
+  - `description` (required): Description of the prompt
+  - `systemMessage` (optional): System message for the prompt
+  - `userMessageTemplate` (required): Template for generating the user message
+  - `arguments` (required): Array of argument objects with name, description, and required properties
+  - `isChain` (optional): Whether this prompt is a chain of prompts
+  - `chainSteps` (optional): Array of steps for chain prompts
+  - `restartServer` (optional): Whether to restart the server after updating the prompt
+
+- **delete_prompt**: Deletes a prompt
+  ```
+  POST /api/v1/tools/delete_prompt
+  ```
+  Parameters:
+  - `id` (required): Unique identifier for the prompt to delete
+  - `restartServer` (optional): Whether to restart the server after deleting the prompt
+
+- **modify_prompt_section**: Modifies a specific section of a prompt
+  ```
+  POST /api/v1/tools/modify_prompt_section
+  ```
+  Parameters:
+  - `id` (required): Unique identifier of the prompt to modify
+  - `section_name` (required): Name of the section to modify (e.g., "title", "description", "System Message", "User Message Template")
+  - `new_content` (required): New content for the specified section
+
+### Server Management Tools
+
+- **reload_prompts**: Refreshes all prompts and optionally restarts the server
+  ```
+  POST /api/v1/tools/reload_prompts
+  ```
+  Parameters:
+  - `restart` (optional): Whether to restart the server after reloading prompts (boolean)
+  - `reason` (optional): Reason for reloading/restarting the server
+
+### Category Management Tools
+
+- **create_category**: Creates a new prompt category
+  ```
+  POST /api/v1/tools/create_category
+  ```
+  Parameters:
+  - `id` (required): Unique identifier for the category
+  - `name` (required): Display name for the category
+  - `description` (required): Description of the category
+
+### Command Processing Tools
+
+- **process_slash_command**: Processes slash commands that trigger prompt templates
+  ```
+  POST /api/v1/tools/process_slash_command
+  ```
+  Parameters:
+  - `command` (required): The command to process (e.g., "/content_analysis Hello world")
+
+### Activating Tools in Claude
+
+Some tools can be accessed directly through the Claude interface:
+- **listprompts**: List all available commands
+  ```
+  >>listprompts
+  ```
+  or
+  ```
+  /listprompts
+  ```
+
+- **reload_prompts**: Reload all prompts and optionally restart the server
+  ```
+  >>reload_prompts restart=true reason="Updated configuration"
+  ```
+
+- **update_prompt**: Create or update a prompt
+- **delete_prompt**: Delete a prompt
+- **modify_prompt_section**: Modify a specific section of a prompt
+
+- **Executing a prompt**:
+  ```
+  >>prompt_name argument1=value1 argument2=value2
+  ```
+  or
+  ```
+  /prompt_name argument1=value1 argument2=value2
+  ```
+
+- **Using JSON format for arguments**:
+  ```
+  >>prompt_name {"argument1": "value1", "argument2": "value2"}
+  ```
+
+#### Reloading prompts:
+
+```bash
+curl -X POST http://localhost:9090/api/v1/tools/reload_prompts
+```
+
+#### Reloading prompts and restarting the server:
+
+```bash
+curl -X POST http://localhost:9090/api/v1/tools/reload_prompts \
+  -H "Content-Type: application/json" \
+  -d '{
+    "restart": true,
+    "reason": "Configuration update"
+  }'
+```
+
+### API Usage Examples
+
+#### Creating a new prompt:
+
+```bash
+curl -X POST http://localhost:9090/api/v1/tools/update_prompt \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "example_prompt",
+    "name": "Example Prompt",
+    "category": "general",
+    "description": "An example prompt template",
+    "userMessageTemplate": "This is an example with {{variable}}",
+    "arguments": [
+      {
+        "name": "variable",
+        "description": "Example variable",
+        "required": true
+      }
+    ]
+  }'
+```
+
+#### Deleting a prompt:
+
+```bash
+curl -X POST http://localhost:9090/api/v1/tools/delete_prompt \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "example_prompt"
+  }'
+```
+
+#### Reloading prompts:
+
+```bash
+curl -X POST http://localhost:9090/api/v1/tools/reload_prompts
 ```

@@ -16,6 +16,30 @@ const log = {
 };
 
 /**
+ * Resolves a prompt file path consistently across the application
+ * @param promptFile The file path from the prompt data
+ * @param configFilePath The path to the config file (used as reference for absolute paths)
+ * @param categoryFolder The path to the category folder (used for relative paths)
+ * @returns The fully resolved path to the prompt file
+ */
+export function resolvePromptFilePath(
+  promptFile: string,
+  configFilePath: string,
+  categoryFolder: string
+): string {
+  if (promptFile.startsWith('/')) {
+    // Absolute path (relative to config file location)
+    return path.resolve(path.dirname(configFilePath), promptFile.slice(1));
+  } else if (promptFile.includes('/')) {
+    // Path already includes category or sub-path
+    return path.resolve(path.dirname(configFilePath), promptFile);
+  } else {
+    // Simple filename, relative to category folder
+    return path.resolve(categoryFolder, promptFile);
+  }
+}
+
+/**
  * Reads a prompt file and returns its content
  * @param promptFilePath Path to the prompt file
  * @returns The content of the prompt file
@@ -131,18 +155,8 @@ export async function modifyPromptSection(
     // Determine the category folder path
     const categoryFolder = path.dirname(categoryFilePath);
     
-    // Get the full path to the prompt file (considering it might be relative to the category folder)
-    let promptFilePath: string;
-    if (prompt.file.startsWith('/')) {
-      // Absolute path
-      promptFilePath = path.resolve(path.dirname(configFilePath), prompt.file.slice(1));
-    } else if (prompt.file.includes('/')) {
-      // Path already includes category
-      promptFilePath = path.resolve(path.dirname(configFilePath), prompt.file);
-    } else {
-      // Relative to category folder
-      promptFilePath = path.resolve(categoryFolder, prompt.file);
-    }
+    // Get the full path to the prompt file using the new utility function
+    const promptFilePath = resolvePromptFilePath(prompt.file, configFilePath, categoryFolder);
     
     // Read the prompt file
     const promptContent = await readPromptFile(promptFilePath);
@@ -177,15 +191,6 @@ export async function modifyPromptSection(
         newPromptContent += `## ${name}\n\n${content}\n\n`;
       }
     }
-    
-    // Create a backup of the original prompt file
-    const backupPath = `${promptFilePath}.bak`;
-    await fs.writeFile(backupPath, originalContent, 'utf8');
-    
-    try {
-      // Remove the prompt from the category file
-      promptsFile.prompts.splice(promptIndex, 1);
-      await fs.writeFile(categoryFilePath, JSON.stringify(promptsFile, null, 2), 'utf8');
       
       // Create the updated prompt
       const updatedPrompt: PromptData = {
@@ -193,38 +198,209 @@ export async function modifyPromptSection(
         name: sectionName === 'title' ? newContent : originalPrompt.name
       };
       
-      // Write the updated prompt file
-      await fs.writeFile(promptFilePath, newPromptContent, 'utf8');
+    // Create a copy of the prompts file with the prompt removed
+    const updatedPromptsFile = {
+      ...promptsFile,
+      prompts: [...promptsFile.prompts]
+    };
+    updatedPromptsFile.prompts.splice(promptIndex, 1);
+    
+    // Add the updated prompt to the new prompts array
+    updatedPromptsFile.prompts.push(updatedPrompt);
+    
+    // Define the operations and rollbacks for the transaction
+    const operations = [
+      // 1. Write the updated prompt content to the file
+      async () => await safeWriteFile(promptFilePath, newPromptContent),
       
-      // Update the category file with the updated prompt
-      promptsFile.prompts.push(updatedPrompt);
-      await fs.writeFile(categoryFilePath, JSON.stringify(promptsFile, null, 2), 'utf8');
+      // 2. Write the updated category file with the prompt removed and added back
+      async () => await safeWriteFile(categoryFilePath, JSON.stringify(updatedPromptsFile, null, 2))
+    ];
+    
+    const rollbacks = [
+      // 1. Restore the original prompt content
+      async () => await fs.writeFile(promptFilePath, originalContent, 'utf8'),
+      
+      // 2. Restore the original category file
+      async () => await fs.writeFile(categoryFilePath, JSON.stringify(promptsFile, null, 2), 'utf8')
+    ];
+    
+    // Perform the operations as a transaction
+    await performTransactionalFileOperations(operations, rollbacks);
       
       return `Successfully modified section '${sectionName}' in prompt '${promptId}'`;
     } catch (error) {
-      // Rollback if an error occurs
-      log.error(`Error modifying prompt section, rolling back:`, error);
-      
-      // Restore the original prompt file
-      await fs.copyFile(backupPath, promptFilePath);
-      
-      // Restore the category file
-      if (promptIndex !== -1) {
-        promptsFile.prompts[promptIndex] = originalPrompt;
-        await fs.writeFile(categoryFilePath, JSON.stringify(promptsFile, null, 2), 'utf8');
-      }
-      
-      throw new Error(`Failed to modify prompt section: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      // Clean up the backup file
-      try {
-        await fs.unlink(backupPath);
-      } catch (error) {
-        log.warn(`Failed to delete backup file ${backupPath}:`, error);
-      }
-    }
-  } catch (error) {
     log.error(`Error in modifyPromptSection:`, error);
     throw new Error(`Failed to modify prompt section: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+/**
+ * Helper function to perform a series of file operations as a transaction
+ * Automatically rolls back all changes if any operation fails
+ * @param operations Array of async functions that perform file operations
+ * @param rollbacks Array of async functions that undo the operations
+ * @returns Result of the last operation if successful
+ */
+export async function performTransactionalFileOperations<T>(
+  operations: Array<() => Promise<any>>,
+  rollbacks: Array<() => Promise<any>>
+): Promise<T> {
+  // Validate inputs
+  if (!operations || !Array.isArray(operations) || operations.length === 0) {
+    throw new Error("No operations provided for transaction");
+  }
+  
+  if (!rollbacks || !Array.isArray(rollbacks)) {
+    log.warn("No rollbacks provided for transaction - operations cannot be rolled back if they fail");
+    rollbacks = [];
+  }
+  
+  // Ensure rollbacks array matches operations array length
+  if (rollbacks.length < operations.length) {
+    log.warn(`Rollbacks array (${rollbacks.length}) is shorter than operations array (${operations.length}) - some operations cannot be rolled back`);
+    // Fill with dummy rollbacks
+    for (let i = rollbacks.length; i < operations.length; i++) {
+      rollbacks.push(async () => { log.warn(`No rollback defined for operation ${i}`); });
+    }
+  }
+  
+  let lastSuccessfulIndex = -1;
+  let result: any;
+  
+  try {
+    // Perform operations
+    for (let i = 0; i < operations.length; i++) {
+      if (typeof operations[i] !== 'function') {
+        throw new Error(`Operation at index ${i} is not a function`);
+      }
+      result = await operations[i]();
+      lastSuccessfulIndex = i;
+    }
+    return result as T;
+  } catch (error) {
+    log.error(`Transaction failed at operation ${lastSuccessfulIndex + 1}:`, error);
+    
+    // Perform rollbacks in reverse order
+    for (let i = lastSuccessfulIndex; i >= 0; i--) {
+      try {
+        if (typeof rollbacks[i] === 'function') {
+          await rollbacks[i]();
+        } else {
+          log.warn(`Skipping invalid rollback at index ${i} (not a function)`);
+        }
+      } catch (rollbackError) {
+        log.error(`Error during rollback operation ${i}:`, rollbackError);
+        // Continue with other rollbacks even if one fails
+      }
+    }
+    throw error;
+  }
+}
+
+/**
+ * Safely writes content to a file by first writing to a temp file, then renaming
+ * This ensures the file is either completely written or left unchanged
+ * @param filePath Path to the file
+ * @param content Content to write
+ * @param encoding Optional encoding (defaults to 'utf8')
+ */
+export async function safeWriteFile(filePath: string, content: string, encoding: BufferEncoding = 'utf8'): Promise<void> {
+  const tempPath = `${filePath}.tmp`;
+  
+  try {
+    // Write to temp file
+    await fs.writeFile(tempPath, content, encoding);
+    
+    // Check if the original file exists
+    try {
+      await fs.access(filePath);
+      // If it exists, make a backup
+      const backupPath = `${filePath}.bak`;
+      await fs.copyFile(filePath, backupPath);
+      
+      // Replace the original with the temp file
+      await fs.rename(tempPath, filePath);
+      
+      // Remove the backup
+      await fs.unlink(backupPath);
+    } catch (error) {
+      // File doesn't exist, just rename the temp file
+      await fs.rename(tempPath, filePath);
+    }
+  } catch (error) {
+    // Clean up temp file if it exists
+    try {
+      await fs.unlink(tempPath);
+    } catch (cleanupError) {
+      // Ignore errors during cleanup
+    }
+    throw error;
+  }
+}
+
+/**
+ * Searches for and deletes a prompt markdown file by prompt ID
+ * This function will look in all category folders for a file matching the prompt ID
+ * @param promptId The ID of the prompt whose markdown file to delete
+ * @param baseDir The base directory where prompt categories are stored
+ * @returns An object indicating whether the file was found and deleted, and any error message
+ */
+export async function findAndDeletePromptFile(promptId: string, baseDir: string): Promise<{ found: boolean; deleted: boolean; path?: string; error?: string }> {
+  try {
+    // Get all category directories
+    const categoryDirs = await fs.readdir(baseDir, { withFileTypes: true });
+    
+    // Filter for directories only
+    const categories = categoryDirs
+      .filter(dirent => dirent.isDirectory())
+      .map(dirent => dirent.name);
+    
+    log.info(`Searching for markdown file with ID '${promptId}' in ${categories.length} category folders`);
+    
+    // Possible filenames to look for
+    const possibleFilenames = [
+      `${promptId}.md`,                // Simple ID.md
+      `${promptId.replace(/-/g, '_')}.md`, // ID with underscores instead of hyphens
+      `${promptId.replace(/_/g, '-')}.md`  // ID with hyphens instead of underscores
+    ];
+    
+    // Search each category directory for the file
+    for (const category of categories) {
+      const categoryPath = path.join(baseDir, category);
+      
+      try {
+        const files = await fs.readdir(categoryPath);
+        
+        // Check each possible filename
+        for (const filename of possibleFilenames) {
+          if (files.includes(filename)) {
+            const filePath = path.join(categoryPath, filename);
+            log.info(`Found markdown file at: ${filePath}`);
+            
+            // Try to delete the file
+            try {
+              await fs.unlink(filePath);
+              log.info(`Successfully deleted markdown file: ${filePath}`);
+              return { found: true, deleted: true, path: filePath };
+            } catch (deleteError) {
+              const errorMessage = `Error deleting file at ${filePath}: ${deleteError instanceof Error ? deleteError.message : String(deleteError)}`;
+              log.error(errorMessage);
+              return { found: true, deleted: false, path: filePath, error: errorMessage };
+            }
+          }
+        }
+      } catch (readError) {
+        log.warn(`Error reading directory ${categoryPath}: ${readError instanceof Error ? readError.message : String(readError)}`);
+        // Continue to next category
+      }
+    }
+    
+    log.warn(`Could not find markdown file for prompt '${promptId}' in any category folder`);
+    return { found: false, deleted: false };
+  } catch (error) {
+    const errorMessage = `Error searching for prompt file: ${error instanceof Error ? error.message : String(error)}`;
+    log.error(errorMessage);
+    return { found: false, deleted: false, error: errorMessage };
   }
 } 

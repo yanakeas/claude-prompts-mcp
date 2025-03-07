@@ -27,6 +27,24 @@ import {
   processTemplate as originalProcessTemplate
 } from './utils/jsonUtils.js';
 import * as fs from "fs/promises";
+import { 
+  readPromptFile, 
+  parsePromptSections, 
+  modifyPromptSection, 
+  resolvePromptFilePath,
+  safeWriteFile,
+  performTransactionalFileOperations,
+  findAndDeletePromptFile
+} from './promptUtils.js';
+
+// Extend the NodeJS global interface to include gc() function
+declare global {
+  namespace NodeJS {
+    interface Global {
+      gc?: () => void;
+    }
+  }
+}
 
 // Text Reference System
 interface TextReference {
@@ -1188,32 +1206,45 @@ server.tool(
         inputMapping: z.record(z.string()).optional().describe("Maps chain inputs to this step's inputs"),
         outputMapping: z.record(z.string()).optional().describe("Maps this step's outputs to chain outputs")
       })
-    ).optional().describe("Steps in the chain if this is a chain prompt")
+    ).optional().describe("Steps in the chain if this is a chain prompt"),
+    restartServer: z.boolean().optional().describe("Whether to restart the server after updating the prompt")
   },
   async (args, extra) => {
     try {
       log.info(`Updating prompt: ${args.id}`);
       
-      // Read the current prompts.json file
+      // Read the main prompts configuration file
       const PROMPTS_FILE = path.join(__dirname, "..", config.prompts.file);
       const fileContent = await readFile(PROMPTS_FILE, "utf8");
-      const promptsFile = JSON.parse(fileContent) as PromptsFile;
+      const promptsConfig = JSON.parse(fileContent) as PromptsConfigFile;
+      
+      // Ensure categories array exists
+      if (!promptsConfig.categories) {
+        log.warn(`promptsConfig.json does not have a 'categories' array. Initializing it.`);
+        promptsConfig.categories = [];
+      }
+      
+      // Ensure imports array exists
+      if (!promptsConfig.imports) {
+        log.warn(`promptsConfig.json does not have an 'imports' array. Initializing it.`);
+        promptsConfig.imports = [];
+      }
       
       // Check if the category exists
-      const categoryExists = promptsFile.categories.some(cat => cat.id === args.category);
-      let effectiveCategory = args.category; // Define this variable outside the if block
+      const categoryExists = promptsConfig.categories.some(cat => cat.id === args.category.toLowerCase().replace(/\s+/g, "-"));
+      let effectiveCategory = args.category.toLowerCase().replace(/\s+/g, "-"); // Clean category ID
       
       // If the category doesn't exist, create it
       if (!categoryExists) {
         log.info(`Category '${args.category}' does not exist. Creating it automatically.`);
         
         // Generate a clean category ID
-        const categoryId = args.category.toLowerCase().replace(/\s+/g, "-");
+        const categoryId = effectiveCategory;
         const categoryName = args.category; // Use original name for display
         const categoryDescription = `Prompts related to ${args.category}`;
         
         // Add the new category to the prompts file
-        promptsFile.categories.push({ 
+        promptsConfig.categories.push({ 
           id: categoryId, 
           name: categoryName, 
           description: categoryDescription 
@@ -1224,24 +1255,99 @@ server.tool(
         try {
           await fs.mkdir(categoryDirPath, { recursive: true });
           log.info(`Created directory for new category: ${categoryDirPath}`);
+          
+          // Create a prompts.json file for the new category
+          const categoryPromptsPath = path.join(categoryDirPath, "prompts.json");
+          const categoryPrompts = {
+            prompts: [] // Start with an empty array of prompts
+          };
+          
+          try {
+            await safeWriteFile(categoryPromptsPath, JSON.stringify(categoryPrompts, null, 2), "utf8");
+            log.info(`Created prompts.json file for new category: ${categoryPromptsPath}`);
+            
+            // Add the category file to imports in the main prompts.json
+            const relativeCategoryPath = path.join("prompts", categoryId, "prompts.json").replace(/\\/g, '/');
+            
+            if (!promptsConfig.imports.includes(relativeCategoryPath)) {
+              promptsConfig.imports.push(relativeCategoryPath);
+              log.info(`Added ${relativeCategoryPath} to imports in main promptsConfig.json`);
+            }
+          } catch (error) {
+            log.error(`Error creating prompts.json for category ${categoryId}:`, error);
+            // Continue even if file creation fails
+          }
         } catch (error) {
           log.error(`Error creating directory ${categoryDirPath}:`, error);
-          // Continue even if directory creation fails
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Failed to create directory for category '${args.category}'.`
+              }
+            ],
+            isError: true
+          };
         }
         
-        // Update the effective category to use the cleaned ID
-        const originalCategory = args.category;
-        effectiveCategory = categoryId;
-        log.info(`Created new category: '${originalCategory}' with ID: '${categoryId}'`);
+        log.info(`Created new category: '${args.category}' with ID: '${categoryId}'`);
       }
       
-      // Check if the prompt already exists
-      const existingPromptIndex = promptsFile.prompts.findIndex(p => p.id === args.id);
+      // Determine the file path for the prompt
+      const promptFilename = `${args.id}.md`;
+      const promptFilePath = path.join("prompts", effectiveCategory, promptFilename);
+      const fullPromptFilePath = path.join(__dirname, "..", promptFilePath);
+      
+      // Find the category-specific prompts.json file
+      const categoryPromptsPath = path.join(__dirname, "..", "prompts", effectiveCategory, "prompts.json");
+      
+      // Read or create the category prompts file
+      let categoryPrompts: { prompts: PromptData[] };
+      try {
+        const categoryPromptsContent = await readFile(categoryPromptsPath, "utf8");
+        categoryPrompts = JSON.parse(categoryPromptsContent);
+        
+        // Ensure it has a prompts array
+        if (!categoryPrompts.prompts) {
+          categoryPrompts.prompts = [];
+        }
+      } catch (error) {
+        log.warn(`Could not read category prompts file ${categoryPromptsPath}, creating new file.`);
+        categoryPrompts = { prompts: [] };
+      }
+      
+      // Check if the prompt already exists in the category file
+      const existingPromptIndex = categoryPrompts.prompts.findIndex(p => p.id === args.id);
       const promptExists = existingPromptIndex !== -1;
       
-      // Determine the file path for the prompt
-      const promptFilePath = `prompts/${effectiveCategory}/${args.id}.md`;
-      const fullPromptFilePath = path.join(__dirname, "..", promptFilePath);
+      // If the prompt exists, get its current file path
+      let currentPromptFilePath = '';
+      if (promptExists) {
+        const currentPrompt = categoryPrompts.prompts[existingPromptIndex];
+        const categoryFolder = path.join(__dirname, "..", "prompts", effectiveCategory);
+        
+        // Resolve the full path to the current prompt file
+        if (currentPrompt.file.includes('/') || currentPrompt.file.includes('\\')) {
+          // If it's a path, resolve it
+          currentPromptFilePath = resolvePromptFilePath(currentPrompt.file, PROMPTS_FILE, categoryFolder);
+        } else {
+          // If it's just a filename, join with the category folder
+          currentPromptFilePath = path.join(categoryFolder, currentPrompt.file);
+        }
+        
+        log.info(`Existing prompt found. Current file: ${currentPromptFilePath}, will be updated to: ${fullPromptFilePath}`);
+        
+        // If the file path changed, remove the old file
+        if (currentPromptFilePath !== fullPromptFilePath) {
+          try {
+            await fs.unlink(currentPromptFilePath);
+            log.info(`Removed old prompt file: ${currentPromptFilePath}`);
+          } catch (error) {
+            log.warn(`Could not remove old prompt file ${currentPromptFilePath}:`, error);
+            // Continue even if file deletion fails
+          }
+        }
+      }
       
       // Create the prompt directory if it doesn't exist
       const promptDirPath = path.join(__dirname, "..", "prompts", effectiveCategory);
@@ -1306,7 +1412,7 @@ server.tool(
       
       // Write the prompt file
       try {
-        await writeFile(fullPromptFilePath, promptFileContent, "utf8");
+        await safeWriteFile(fullPromptFilePath, promptFileContent, "utf8");
         log.info(`Created prompt file: ${fullPromptFilePath}`);
       } catch (error) {
         log.error(`Error writing prompt file ${fullPromptFilePath}:`, error);
@@ -1321,67 +1427,130 @@ server.tool(
         };
       }
       
-      // Create or update the prompt entry in prompts.json
-      const promptEntry: PromptData = {
+      // Create a prompt entry for the category-specific prompts.json
+      const categoryPromptEntry: PromptData = {
         id: args.id,
         name: args.name,
         category: effectiveCategory,
         description: args.description,
-        file: promptFilePath,
+        file: promptFilename, // Just the filename within the category folder
         arguments: args.arguments
       };
       
+      // Update or add the prompt to the category file
       if (promptExists) {
-        // Update existing prompt
-        promptsFile.prompts[existingPromptIndex] = promptEntry;
+        categoryPrompts.prompts[existingPromptIndex] = categoryPromptEntry;
       } else {
-        // Add new prompt
-        promptsFile.prompts.push(promptEntry);
+        categoryPrompts.prompts.push(categoryPromptEntry);
       }
       
-      // Write the updated prompts.json file
-      try {
-        await writeFile(PROMPTS_FILE, JSON.stringify(promptsFile, null, 2), "utf8");
-        log.info(`Updated prompts.json with prompt: ${args.id}`);
+      // Define operations for the transaction
+      const operations = [
+        // 1. Write the updated category prompts file
+        async () => {
+          await safeWriteFile(categoryPromptsPath, JSON.stringify(categoryPrompts, null, 2), "utf8");
+          log.info(`Updated category prompts file: ${categoryPromptsPath}`);
+          return true;
+        },
         
-        // Reload prompts using the new function
+        // 2. Write the updated main config file (only if we added a new category)
+        async () => {
+          if (!categoryExists) {
+            // Only update the main config if we added a new category
+            await safeWriteFile(PROMPTS_FILE, JSON.stringify(promptsConfig, null, 2), "utf8");
+            log.info(`Updated main promptsConfig.json with new category: ${effectiveCategory}`);
+          }
+          return true;
+        }
+      ];
+      
+      const rollbacks = [
+        // 1. Restore the original category prompts file
+        async () => {
+          if (promptExists) {
+            // If the prompt existed, we need to restore the original entry
+            const originalCategoryPromptsContent = await readFile(categoryPromptsPath, "utf8");
+            const originalCategoryPrompts = JSON.parse(originalCategoryPromptsContent);
+            await fs.writeFile(categoryPromptsPath, JSON.stringify(originalCategoryPrompts, null, 2), "utf8");
+          } else {
+            // If it's a new prompt, we can just remove it from the array
+            const updatedPrompts = categoryPrompts.prompts.filter(p => p.id !== args.id);
+            await fs.writeFile(categoryPromptsPath, JSON.stringify({ prompts: updatedPrompts }, null, 2), "utf8");
+          }
+        },
+        
+        // 2. Restore the original main config file
+        async () => {
+          if (!categoryExists) {
+            await fs.writeFile(PROMPTS_FILE, fileContent, "utf8");
+          }
+        }
+      ];
+      
+      // Perform the operations as a transaction
+      try {
+        await performTransactionalFileOperations(operations, rollbacks);
+        
+        // Make a request to the reload_prompts API endpoint
         try {
-          const result = await reloadPrompts();
-          // Replace the global convertedPrompts array with the new values
-          convertedPrompts.length = 0;
-          result.convertedPrompts.forEach(prompt => convertedPrompts.push(prompt));
-          log.info(`Reloaded prompts after updating prompt: ${args.id}`);
-        } catch (reloadError) {
-          log.error(`Error reloading prompts after updating prompt: ${args.id}`, reloadError);
-          // Continue even if reload fails
+          await triggerServerRefresh();
+          log.info(`Triggered server refresh after updating prompt: ${args.id}`);
+        } catch (refreshError) {
+          log.error(`Error refreshing server after updating prompt: ${args.id}`, refreshError);
+          // Continue even if refresh fails
+        }
+        
+        // In the update_prompt function, replace the _meta section with a direct call to handleServerRestart
+        if (args.restartServer) {
+          log.info(`Restart server option selected for prompt: ${args.id}`);
+          
+          // Schedule the refresh with restart to happen after the response is sent
+          setTimeout(async () => {
+            try {
+              await triggerServerRefresh(true, `Prompt updated: ${args.id}`);
+            } catch (error) {
+              log.error(`Error refreshing server after updating prompt: ${args.id}`, error);
+            }
+          }, 1000);
+          
+          // Return a response that includes information about the restart
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: `Successfully ${promptExists ? 'updated' : 'created'} prompt: ${args.id}\nPrompt file created at: ${promptFilePath}\n\nRestarting server as requested...`
+              }
+            ]
+          };
+        } else {
+          // Return the normal response
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: `Successfully ${promptExists ? 'updated' : 'created'} prompt: ${args.id}\nPrompt file created at: ${promptFilePath}\n\nIf you need to use this prompt immediately, you may need to restart the server with the restart_server tool.`
+              }
+            ]
+          };
         }
       } catch (error) {
-        log.error(`Error writing prompts.json:`, error);
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Failed to update prompts.json file.`
-            }
+        log.error(`Error updating prompt:`, error);
+      return {
+        content: [
+          {
+            type: "text",
+              text: `Failed to update prompt: ${error instanceof Error ? error.message : String(error)}`
+          }
           ],
           isError: true
-        };
-      }
-      
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Successfully ${promptExists ? 'updated' : 'created'} prompt: ${args.id}\nPrompt file created at: ${promptFilePath}`
-          }
-        ]
       };
+      }
     } catch (error) {
-      log.error(`Error updating prompt:`, error);
+      log.error(`Error in update_prompt:`, error);
       return {
         content: [
           {
-            type: "text",
+            type: "text" as const,
             text: `Failed to update prompt: ${error instanceof Error ? error.message : String(error)}`
           }
         ],
@@ -1396,77 +1565,179 @@ server.tool(
   "delete_prompt",
   {
     id: z.string().describe("Unique identifier for the prompt to delete"),
+    restartServer: z.boolean().optional().describe("Whether to restart the server after deleting the prompt")
   },
-  async (args, extra) => {
+  async ({ id, restartServer }, extra) => {
     try {
-      log.info(`Deleting prompt: ${args.id}`);
+      log.info(`Deleting prompt: ${id}`);
       
-      // Read the current prompts.json file
+      // Read the main prompts configuration file
       const PROMPTS_FILE = path.join(__dirname, "..", config.prompts.file);
-      const fileContent = await readFile(PROMPTS_FILE, "utf8");
-      const promptsFile = JSON.parse(fileContent) as PromptsFile;
       
-      // Extract the id from the request body
-      const { id } = args;
-      
-      // Find the prompt to delete
-      const promptIndex = promptsFile.prompts.findIndex(p => p.id === id);
-      
-      if (promptIndex === -1) {
+      try {
+        // Try to load all prompts from all categories first
+        const loadResult = await loadCategoryPrompts(PROMPTS_FILE);
+        const allPrompts = loadResult.promptsData;
+        
+        // Find the prompt to delete from all loaded prompts
+        const promptToDelete = allPrompts.find(p => p.id === id);
+        
+        if (!promptToDelete) {
         return {
           content: [
             {
               type: "text",
-              text: `Prompt with ID '${id}' not found`
+                text: `Prompt with ID '${id}' not found in any category`
             }
           ],
           isError: true
         };
       }
       
-      // Get the prompt data before removing it
-      const promptToDelete = promptsFile.prompts[promptIndex];
-      
-      // Remove the prompt from the array
-      promptsFile.prompts.splice(promptIndex, 1);
-      
-      // Write the updated prompts.json file
-      await writeFile(PROMPTS_FILE, JSON.stringify(promptsFile, null, 2), "utf8");
-      
-      // Delete the prompt file if it exists
-      try {
-        const promptFilePath = path.join(__dirname, "..", promptToDelete.file);
-        await fs.unlink(promptFilePath);
-        log.info(`Deleted prompt file: ${promptFilePath}`);
-      } catch (fileError) {
-        log.warn(`Could not delete prompt file: ${fileError instanceof Error ? fileError.message : String(fileError)}`);
-        // Continue even if file deletion fails
-      }
-      
-      // Reload prompts and categories
-      try {
-        const result = await reloadPrompts();
-        log.info(`Reloaded ${promptsData.length} prompts and ${categories.length} categories after deleting prompt: ${id}`);
-      } catch (error) {
-        log.error("Error reloading prompts data:", error);
-        // Continue even if reload fails
-      }
-      
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Prompt '${promptToDelete.name}' (ID: ${id}) deleted successfully`
+        // Step 1: Delete the markdown file using our new utility
+        const promptsDir = path.join(__dirname, "..", "prompts");
+        const fileResult = await findAndDeletePromptFile(id, promptsDir);
+        
+        if (fileResult.found) {
+          if (fileResult.deleted) {
+            log.info(`Successfully deleted markdown file for prompt '${id}'`);
+          } else {
+            log.error(`Found but could not delete markdown file: ${fileResult.error}`);
           }
-        ]
-      };
+        } else {
+          log.warn(`Could not find markdown file for prompt '${id}'`);
+        }
+        
+        // Step 2: Update the category-specific prompts.json file
+        
+        // Find the category-specific prompts.json file
+        const categoryFolder = path.join(__dirname, "..", "prompts", promptToDelete.category);
+        const categoryPromptsPath = path.join(categoryFolder, "prompts.json");
+        
+        // Read the category prompts file
+        let categoryPrompts: { prompts: PromptData[] };
+        try {
+          const categoryPromptsContent = await readFile(categoryPromptsPath, "utf8");
+          categoryPrompts = JSON.parse(categoryPromptsContent);
+          
+          // Ensure it has a prompts array
+          if (!categoryPrompts.prompts) {
+            log.warn(`Category prompts file ${categoryPromptsPath} does not have a 'prompts' array.`);
+            categoryPrompts.prompts = [];
+          }
+        } catch (error) {
+          log.error(`Error reading category prompts file ${categoryPromptsPath}:`, error);
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Could not read category prompts file for category '${promptToDelete.category}'`
+              }
+            ],
+            isError: true
+          };
+        }
+        
+        // Find the prompt in the category file
+        const promptIndex = categoryPrompts.prompts.findIndex(p => p.id === id);
+        
+        if (promptIndex === -1) {
+          log.warn(`Prompt with ID '${id}' not found in category file ${categoryPromptsPath}`);
+          // Continue with process even if prompt not found in category file
+        }
+        
+        // Create updated category prompts without the prompt to delete
+        const updatedCategoryPrompts = {
+          ...categoryPrompts,
+          prompts: categoryPrompts.prompts.filter(p => p.id !== id)
+        };
+        
+        // Make a backup of the category file content
+        const originalCategoryContent = JSON.stringify(categoryPrompts, null, 2);
+        
+        // Define operations for transactional file operations
+        const operations = [
+          // Update the category prompts file
+          async () => {
+            await safeWriteFile(categoryPromptsPath, JSON.stringify(updatedCategoryPrompts, null, 2), "utf8");
+            log.info(`Updated category prompts file: ${categoryPromptsPath}`);
+            return true;
+          }
+        ];
+        
+        // Define rollback operations
+        const rollbacks = [
+          // Restore the original category file
+          async () => {
+            await fs.writeFile(categoryPromptsPath, originalCategoryContent, "utf8");
+            log.info(`Restored original category prompts file: ${categoryPromptsPath}`);
+          }
+        ];
+        
+        // Perform the operations as a transaction
+        await performTransactionalFileOperations(operations, rollbacks);
+        
+        // Make a request to the reload_prompts API endpoint
+        try {
+          await triggerServerRefresh();
+          log.info(`Triggered server refresh after deleting prompt: ${id}`);
+        } catch (refreshError) {
+          log.error(`Error refreshing server after deleting prompt: ${id}`, refreshError);
+          // Continue even if refresh fails
+      }
+      
+      // In the delete_prompt function, replace the _meta section with a direct call to handleServerRestart
+      if (restartServer) {
+        log.info(`Restart server option selected for prompt: ${id}`);
+        
+        // Schedule the refresh with restart to happen after the response is sent
+        setTimeout(async () => {
+          try {
+            await triggerServerRefresh(true, `Prompt deleted: ${id}`);
+          } catch (error) {
+            log.error(`Error refreshing server after deleting prompt: ${id}`, error);
+          }
+        }, 1000);
+        
+        // Return a response that includes information about the restart
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Prompt '${promptToDelete.name}' (ID: ${id}) deleted successfully${fileResult.deleted ? ' including its markdown file' : ''}\n\nRestarting server as requested...`
+            }
+          ]
+        };
+      } else {
+        // Return the normal response
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Prompt '${promptToDelete.name}' (ID: ${id}) deleted successfully${fileResult.deleted ? ' including its markdown file' : ''}\n\nIf you need this change to take effect immediately, you may need to restart the server with the restart_server tool.`
+            }
+          ]
+        };
+      }
     } catch (error) {
-      log.error("Error deleting prompt:", error);
+        log.error("Error in delete_prompt tool:", error);
       return {
         content: [
           {
-            type: "text",
+            type: "text" as const,
             text: `Failed to delete prompt: ${error instanceof Error ? error.message : String(error)}`
+          }
+        ],
+        isError: true
+      };
+    }
+  } catch (outerError) {
+      log.error("Error in delete_prompt outer try block:", outerError);
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Failed to delete prompt: ${outerError instanceof Error ? outerError.message : String(outerError)}`
           }
         ],
         isError: true
@@ -1489,200 +1760,35 @@ server.tool(
       
       // Read the current prompts.json file
       const PROMPTS_FILE = path.join(__dirname, "..", config.prompts.file);
-      const fileContent = await readFile(PROMPTS_FILE, "utf8");
-      const promptsFile = JSON.parse(fileContent) as PromptsFile;
-      
-      // Find the prompt
-      const promptIndex = promptsFile.prompts.findIndex(p => p.id === args.id);
-      if (promptIndex === -1) {
-        log.error(`Prompt with ID '${args.id}' not found`);
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Prompt with ID '${args.id}' not found`
-            }
-          ],
-          isError: true
-        };
-      }
-      
-      const prompt = promptsFile.prompts[promptIndex];
-      
-      // Read the prompt file
-      const promptFilePath = path.join(__dirname, "..", prompt.file);
-      let promptContent: string;
-      try {
-        promptContent = await readFile(promptFilePath, "utf8");
-      } catch (error) {
-        log.error(`Error reading prompt file ${promptFilePath}:`, error);
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Failed to read prompt file: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ],
-          isError: true
-        };
-      }
-      
-      // Parse the prompt sections
-      const sections: Record<string, string> = {};
-      
-      // Extract the title (first # heading)
-      const titleMatch = promptContent.match(/^# (.+?)(?=\n\n|\n##)/s);
-      if (titleMatch) {
-        sections.title = titleMatch[1].trim();
-        
-        // Extract description (content between title and first ## heading)
-        const descMatch = promptContent.match(/^# .+?\n\n([\s\S]+?)(?=\n## )/s);
-        if (descMatch) {
-          sections.description = descMatch[1].trim();
-        } else {
-          sections.description = '';
-        }
-      }
-      
-      // Extract other sections (## headings)
-      const sectionMatches = Array.from(promptContent.matchAll(/## ([^\n]+)\n\n([\s\S]+?)(?=\n## |\n# |\n$)/g));
-      for (const match of sectionMatches) {
-        const sectionName = match[1].trim();
-        const sectionContent = match[2].trim();
-        sections[sectionName] = sectionContent;
-      }
-      
-      // Check if the section exists
-      const normalizedSectionName = args.section_name === 'title' ? 'title' : 
-                                   args.section_name === 'description' ? 'description' : 
-                                   args.section_name === 'System Message' ? 'System Message' :
-                                   args.section_name === 'User Message Template' ? 'User Message Template' :
-                                   args.section_name;
-      
-      if (!(normalizedSectionName in sections) && 
-          normalizedSectionName !== 'description' && 
-          normalizedSectionName !== 'System Message' && 
-          normalizedSectionName !== 'User Message Template') {
-        log.error(`Section '${args.section_name}' not found in prompt '${args.id}'`);
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Section '${args.section_name}' not found in prompt '${args.id}'`
-            }
-          ],
-          isError: true
-        };
-      }
-      
-      // Store the original prompt data for potential rollback
-      const originalPrompt = { ...prompt };
-      const originalContent = promptContent;
-      
-      // Create a backup of the original prompt file
-      const backupPath = `${promptFilePath}.bak`;
-      try {
-        await writeFile(backupPath, originalContent, "utf8");
-      } catch (error) {
-        log.error(`Error creating backup file ${backupPath}:`, error);
-        // Continue even if backup creation fails
-      }
       
       try {
-        // Modify the section
-        if (normalizedSectionName === 'title') {
-          sections.title = args.new_content;
-        } else if (normalizedSectionName === 'description') {
-          sections.description = args.new_content;
-        } else if (normalizedSectionName === 'System Message') {
-          sections['System Message'] = args.new_content;
-        } else if (normalizedSectionName === 'User Message Template') {
-          sections['User Message Template'] = args.new_content;
-        } else {
-          sections[normalizedSectionName] = args.new_content;
-        }
+        // Use the modifyPromptSection function from promptUtils
+        const result = await modifyPromptSection(
+          args.id,
+          args.section_name,
+          args.new_content,
+          PROMPTS_FILE
+        );
         
-        // Reconstruct the prompt content
-        let newPromptContent = `# ${sections.title}\n\n${sections.description}\n\n`;
-        
-        // Add other sections
-        for (const [name, content] of Object.entries(sections)) {
-          if (name !== 'title' && name !== 'description') {
-            newPromptContent += `## ${name}\n\n${content}\n\n`;
-          }
-        }
-        
-        // Delete the prompt from prompts.json
-        promptsFile.prompts.splice(promptIndex, 1);
-        await writeFile(PROMPTS_FILE, JSON.stringify(promptsFile, null, 2), "utf8");
-        
-        // Delete the prompt file
+        // Make a request to the reload_prompts API endpoint
         try {
-          await fs.unlink(promptFilePath);
-          log.info(`Deleted prompt file: ${promptFilePath}`);
-        } catch (fileError) {
-          log.warn(`Could not delete prompt file: ${fileError instanceof Error ? fileError.message : String(fileError)}`);
-          // Continue even if file deletion fails
-        }
-        
-        // Create the updated prompt
-        const updatedPrompt: PromptData = {
-          ...originalPrompt,
-          name: normalizedSectionName === 'title' ? args.new_content : originalPrompt.name
-        };
-        
-        // Write the updated prompt file
-        await writeFile(promptFilePath, newPromptContent, "utf8");
-        
-        // Update prompts.json
-        promptsFile.prompts.push(updatedPrompt);
-        await writeFile(PROMPTS_FILE, JSON.stringify(promptsFile, null, 2), "utf8");
-        
-        // Reload prompts and categories
-        try {
-          const result = await reloadPrompts();
-          log.info(`Reloaded ${promptsData.length} prompts and ${categories.length} categories after modifying section: ${args.section_name}`);
-        } catch (error) {
-          log.error("Error reloading prompts data:", error);
-          // Continue even if reload fails
+          await triggerServerRefresh();
+          log.info(`Triggered server refresh after modifying section: ${args.section_name}`);
+        } catch (refreshError) {
+          log.error(`Error refreshing server after modifying section: ${args.section_name}`, refreshError);
+          // Continue even if refresh fails
         }
         
         return {
           content: [
             {
               type: "text",
-              text: `Successfully modified section '${args.section_name}' in prompt '${args.id}'`
+              text: result
             }
           ]
         };
       } catch (error) {
-        log.error(`Error modifying prompt section, attempting rollback:`, error);
-        
-        try {
-          // Restore the original prompt file if backup exists
-          try {
-            await fs.copyFile(backupPath, promptFilePath);
-            log.info(`Restored original prompt file from backup`);
-          } catch (restoreError) {
-            log.error(`Error restoring prompt file from backup:`, restoreError);
-          }
-          
-          // Restore the prompts.json file
-          promptsFile.prompts[promptIndex] = originalPrompt;
-          await writeFile(PROMPTS_FILE, JSON.stringify(promptsFile, null, 2), "utf8");
-          log.info(`Restored original prompt entry in prompts.json`);
-          
-          // Reload prompts and categories
-          try {
-            const result = await reloadPrompts();
-            log.info(`Reloaded ${promptsData.length} prompts and ${categories.length} categories after rollback`);
-          } catch (reloadError) {
-            log.error("Error reloading prompts data after rollback:", reloadError);
-          }
-        } catch (rollbackError) {
-          log.error(`Error during rollback:`, rollbackError);
-        }
-        
+        log.error(`Error modifying prompt section:`, error);
         return {
           content: [
             {
@@ -1692,26 +1798,19 @@ server.tool(
           ],
           isError: true
         };
-      } finally {
-        // Clean up the backup file
-        try {
-          await fs.unlink(backupPath);
-        } catch (error) {
-          log.warn(`Failed to delete backup file ${backupPath}:`, error);
-        }
       }
     } catch (error) {
       log.error(`Error in modify_prompt_section:`, error);
-      return {
-        content: [
-          {
-            type: "text",
+        return {
+          content: [
+            {
+              type: "text",
             text: `Failed to modify prompt section: ${error instanceof Error ? error.message : String(error)}`
-          }
-        ],
-        isError: true
-      };
-    }
+            }
+          ],
+          isError: true
+        };
+      }
   }
 );
 
@@ -1720,24 +1819,244 @@ async function reloadPrompts(): Promise<{ promptsData: PromptData[]; convertedPr
   try {
     log.info(`Reloading prompts from ${PROMPTS_FILE}...`);
     
+    // Clear cache before reloading
+    clearRequireCache();
+    
+    // Clear any server-side caches that might exist
+    if (typeof (server as any).clearCache === 'function') {
+      try {
+        (server as any).clearCache();
+        log.info("Cleared server-side prompt cache");
+      } catch (cacheClearError) {
+        log.warn("Could not clear server-side cache:", cacheClearError);
+      }
+    }
+    
     // Load prompts from category-specific files
-    const result = await loadCategoryPrompts(PROMPTS_FILE);
+    let result;
+    try {
+      result = await loadCategoryPrompts(PROMPTS_FILE);
+    } catch (loadError) {
+      log.error(`Error loading category prompts:`, loadError);
+      throw new Error(`Failed to load category prompts: ${loadError instanceof Error ? loadError.message : String(loadError)}`);
+    }
+    
+    // Verify the loaded data
+    if (!result || !result.promptsData || !Array.isArray(result.promptsData)) {
+      log.error(`Invalid data returned from loadCategoryPrompts: ${JSON.stringify(result)}`);
+      throw new Error(`Failed to load category prompts: Invalid data structure returned`);
+    }
+    
+    // Log the loaded prompts for debugging
+    log.info(`Loaded ${result.promptsData.length} prompts from categories`);
     
     // Update the global variables
     promptsData = result.promptsData;
     categories = result.categories;
     
     // Re-convert markdown prompts to JSON
-    const newConvertedPrompts = await convertMarkdownPromptsToJson(promptsData);
+    let newConvertedPrompts;
+    try {
+      newConvertedPrompts = await convertMarkdownPromptsToJson(promptsData);
+    } catch (convertError) {
+      log.error(`Error converting markdown prompts to JSON:`, convertError);
+      throw new Error(`Failed to convert markdown prompts to JSON: ${convertError instanceof Error ? convertError.message : String(convertError)}`);
+    }
+    
+    // Verify the conversion results
+    if (!newConvertedPrompts || !Array.isArray(newConvertedPrompts)) {
+      log.error(`Invalid data returned from convertMarkdownPromptsToJson`);
+      throw new Error(`Failed to convert markdown prompts to JSON: Invalid data structure returned`);
+    }
+    
+    // Update the global convertedPrompts array
+    // Use a transaction-like approach for updating the global array
+    const oldConvertedPrompts = [...convertedPrompts];
+    try {
+      // Clear the array
+      convertedPrompts.length = 0;
+      // Add all new prompts
+      newConvertedPrompts.forEach(prompt => convertedPrompts.push(prompt));
+      
+      // Log detailed information about what's been loaded
+      const categoriesSet = new Set(newConvertedPrompts.map(p => p.category));
+      log.info(`Loaded prompts from ${categoriesSet.size} categories: ${Array.from(categoriesSet).join(', ')}`);
+      
+      // Verify each prompt has been properly loaded
+      const incompletePrompts = newConvertedPrompts.filter(p => 
+        !p.id || !p.name || !p.userMessageTemplate || !p.arguments
+      );
+      
+      if (incompletePrompts.length > 0) {
+        log.warn(`Found ${incompletePrompts.length} incomplete prompts:`, 
+          incompletePrompts.map(p => p.id || 'unknown').join(', ')
+        );
+      }
+      
+      // Re-register all prompts with the server
+      await reRegisterAllPrompts(newConvertedPrompts);
+      
+    } catch (updateError) {
+      log.error(`Error updating global convertedPrompts array:`, updateError);
+      // Restore the old array if there's an error
+      convertedPrompts.length = 0;
+      oldConvertedPrompts.forEach(prompt => convertedPrompts.push(prompt));
+      throw new Error(`Failed to update global convertedPrompts array: ${updateError instanceof Error ? updateError.message : String(updateError)}`);
+    }
     
     log.info(`Successfully reloaded ${promptsData.length} prompts and ${categories.length} categories`);
     log.info(`Successfully converted ${newConvertedPrompts.length} prompts to JSON structure`);
     
     return { promptsData, convertedPrompts: newConvertedPrompts };
-  } catch (error) {
-    log.error(`Error reloading prompts:`, error);
+      } catch (error) {
+    log.error(`Error in reloadPrompts:`, error);
     throw error;
   }
+}
+
+// Function to re-register all prompts with the server
+async function reRegisterAllPrompts(prompts: ConvertedPrompt[]): Promise<void> {
+  try {
+    log.info(`Re-registering ${prompts.length} prompts with the server...`);
+    
+    // Unregister existing prompts if possible
+    if (typeof (server as any).unregisterAllPrompts === 'function') {
+      try {
+        (server as any).unregisterAllPrompts();
+        log.info("Unregistered all existing prompts");
+      } catch (unregisterError) {
+        log.warn("Could not unregister existing prompts:", unregisterError);
+      }
+    }
+    
+    // Set a default registration mode if not specified in config
+    const registrationMode = config.prompts.registrationMode || "both";
+    
+    // Register each prompt from the converted JSON structures
+    let registeredCount = 0;
+    for (const promptData of prompts) {
+      try {
+        // Create the argument schema for this prompt
+        const argsSchema = createArgsSchema(promptData.arguments);
+        
+        // Create the prompt handler
+        const promptHandler = async (args: any, extra: any) => {
+          try {
+            log.info(`Executing prompt '${promptData.name}'...`);
+            
+            // Check if this is a chain prompt
+            if (promptData.isChain && promptData.chainSteps && promptData.chainSteps.length > 0) {
+              log.info(`Prompt '${promptData.name}' is a chain with ${promptData.chainSteps.length} steps. NOT automatically executing the chain.`);
+              
+              // No longer automatically execute the entire chain
+              // Instead, we'll process this as a regular prompt
+              
+              // Regular prompt processing continues below
+            }
+            
+            // Regular (non-chain) prompt processing continues below
+            // Create messages array with only user and assistant roles
+            // System messages will be converted to user messages
+            const messages: { role: "user" | "assistant"; content: { type: "text"; text: string } }[] = [];
+            
+            // Create user message with placeholders replaced
+            let userMessageText = promptData.userMessageTemplate;
+            
+            // If there's a system message, prepend it to the user message
+            if (promptData.systemMessage) {
+              userMessageText = `[System Info: ${promptData.systemMessage}]\n\n${userMessageText}`;
+            }
+            
+            // Process special context placeholders first
+            const specialPlaceholders = {
+              "previous_message": getPreviousMessage()
+            };
+            
+            // Replace special placeholders
+            Object.entries(specialPlaceholders).forEach(([key, value]) => {
+              userMessageText = userMessageText.replace(
+                new RegExp(`\\{\\{${key}\\}\\}`, "g"),
+                String(value)
+              );
+            });
+            
+            // Replace argument placeholders
+            Object.entries(args).forEach(([key, value]) => {
+              if (value !== undefined && value !== null) {
+                const replaced = userMessageText.replace(
+                  new RegExp(`\\{\\{${key}\\}\\}`, "g"),
+                  String(value)
+                );
+                if (replaced === userMessageText) {
+                  log.warn(`Placeholder for argument '${key}' not found in template for prompt '${promptData.name}'`);
+                }
+                userMessageText = replaced;
+              }
+            });
+            
+            // Store in conversation history for future reference
+            addToConversationHistory({
+              role: "user",
+              content: userMessageText,
+              timestamp: Date.now(),
+              isProcessedTemplate: true  // Mark as a processed template, not original user input
+            });
+            
+            // Push the user message to the messages array
+            messages.push({
+              role: "user",
+              content: {
+                type: "text",
+                text: userMessageText
+              }
+            });
+            
+            log.debug(`Processed messages for prompt '${promptData.name}':`, messages);
+            return { messages };
+          } catch (error) {
+            log.error(`Error executing prompt '${promptData.name}':`, error);
+            throw error; // Re-throw to let the MCP framework handle it
+          }
+        };
+        
+        // Register the prompt based on the configuration mode
+        if (registrationMode === "id" || registrationMode === "both") {
+          server.prompt(promptData.id, argsSchema, promptHandler);
+          log.debug(`Registered prompt with ID: ${promptData.id}`);
+        }
+        
+        if (registrationMode === "name" || registrationMode === "both") {
+          server.prompt(promptData.name, argsSchema, promptHandler);
+          log.debug(`Registered prompt with name: ${promptData.name}`);
+        }
+        
+        registeredCount++;
+  } catch (error) {
+        log.error(`Error registering prompt '${promptData.name}':`, error);
+        // Continue with other prompts even if one fails
+      }
+    }
+    
+    log.info(`Successfully re-registered ${registeredCount} prompts with the server`);
+  } catch (error) {
+    log.error(`Error re-registering prompts:`, error);
+    throw error;
+  }
+}
+
+// Helper function to create argument schema for a prompt
+function createArgsSchema(promptArgs: Array<{ name: string; description?: string; required: boolean }>): any {
+  const schema: any = {};
+  
+  for (const arg of promptArgs) {
+    schema[arg.name] = {
+      type: "string",
+      description: arg.description || `Argument: ${arg.name}`,
+      required: arg.required
+    };
+  }
+  
+  return schema;
 }
 
 // Convert markdown prompts to JSON structure
@@ -1922,6 +2241,7 @@ if (transport === "stdio") {
     log.debug(`${req.method} ${req.url} - Headers: ${JSON.stringify(req.headers)}`);
     next();
   });
+  
   
   app.get("/", (_req: Request, res: Response) => {
     res.send("Claude Custom Prompts MCP Server - Use /mcp endpoint for MCP connections");
@@ -2242,13 +2562,13 @@ if (transport === "stdio") {
           // Write the updated prompts.json file
           await writeFile(PROMPTS_FILE, JSON.stringify(promptsFile, null, 2), "utf8");
           
-          // Reload prompts and categories
+          // Make a request to the reload_prompts API endpoint
           try {
-            const result = await reloadPrompts();
-            log.info(`Reloaded ${promptsData.length} prompts and ${categories.length} categories after updating prompt: ${id}`);
-          } catch (error) {
-            log.error("Error reloading prompts data:", error);
-            // Continue even if reload fails
+            await triggerServerRefresh();
+            log.info(`Triggered server refresh after updating prompt: ${id}`);
+          } catch (refreshError) {
+            log.error(`Error refreshing server after updating prompt: ${id}`, refreshError);
+            // Continue even if refresh fails
           }
           
           // Return success response
@@ -2317,13 +2637,13 @@ if (transport === "stdio") {
           // Continue even if file deletion fails
         }
         
-        // Reload prompts and categories
+        // Make a request to the reload_prompts API endpoint
         try {
-          const result = await reloadPrompts();
-          log.info(`Reloaded ${promptsData.length} prompts and ${categories.length} categories after deleting prompt: ${id}`);
-        } catch (error) {
-          log.error("Error reloading prompts data:", error);
-          // Continue even if reload fails
+          await triggerServerRefresh();
+          log.info(`Triggered server refresh after deleting prompt: ${id}`);
+        } catch (refreshError) {
+          log.error(`Error refreshing server after deleting prompt: ${id}`, refreshError);
+          // Continue even if refresh fails
         }
         
         return res.status(200).json({ 
@@ -2494,13 +2814,13 @@ if (transport === "stdio") {
         promptsFile.prompts.push(updatedPrompt);
         await writeFile(PROMPTS_FILE, JSON.stringify(promptsFile, null, 2), "utf8");
         
-        // Reload prompts and categories
+        // Make a request to the reload_prompts API endpoint
         try {
-          const result = await reloadPrompts();
-          log.info(`Reloaded ${promptsData.length} prompts and ${categories.length} categories after modifying section: ${section_name}`);
-        } catch (error) {
-          log.error("Error reloading prompts data:", error);
-          // Continue even if reload fails
+          await triggerServerRefresh();
+          log.info(`Triggered server refresh after modifying section: ${section_name}`);
+        } catch (refreshError) {
+          log.error(`Error refreshing server after modifying section: ${section_name}`, refreshError);
+          // Continue even if refresh fails
         }
         
         return res.status(200).json({
@@ -2525,12 +2845,12 @@ if (transport === "stdio") {
           await writeFile(PROMPTS_FILE, JSON.stringify(promptsFile, null, 2), "utf8");
           log.info(`Restored original prompt entry in prompts.json`);
           
-          // Reload prompts and categories
+          // Make a request to the reload_prompts API endpoint
           try {
-            const result = await reloadPrompts();
-            log.info(`Reloaded ${promptsData.length} prompts and ${categories.length} categories after rollback`);
-          } catch (reloadError) {
-            log.error("Error reloading prompts data after rollback:", reloadError);
+            await triggerServerRefresh();
+            log.info(`Triggered server refresh after rollback`);
+          } catch (rollbackError) {
+            log.error(`Error refreshing server after rollback:`, rollbackError);
           }
         } catch (rollbackError) {
           log.error(`Error during rollback:`, rollbackError);
@@ -2573,34 +2893,61 @@ if (transport === "stdio") {
     try {
       log.info("API request to reload prompts");
       
+      // Check if restart is requested
+      const shouldRestart = req.body && req.body.restart === true;
+      const reason = req.body && req.body.reason ? req.body.reason : "Manual reload requested";
+      
       try {
-        const result = await reloadPrompts();
+        // Use the fullServerRefresh function for a comprehensive refresh
+        await fullServerRefresh();
         
-        // Replace the global convertedPrompts array with the new values
-        // This is necessary because the original array is declared with const
-        convertedPrompts.length = 0;
-        result.convertedPrompts.forEach(prompt => convertedPrompts.push(prompt));
+        // If restart is requested, schedule it after sending the response
+        if (shouldRestart) {
+          log.info(`Server restart requested: ${reason}`);
+          
+          // Schedule the restart to happen after the response is sent
+          setTimeout(async () => {
+            try {
+              await handleServerRestart(reason);
+            } catch (restartError) {
+              log.error("Error during server restart:", restartError);
+            }
+          }, 1000);
+          
+          return res.status(200).json({
+            success: true,
+            message: `Successfully refreshed the server with ${promptsData.length} prompts and ${categories.length} categories. Server is now restarting.`,
+            data: {
+              promptsCount: promptsData.length,
+              categoriesCount: categories.length,
+              convertedPromptsCount: convertedPrompts.length,
+              restarting: true
+            }
+          });
+        }
         
+        // Normal response without restart
         return res.status(200).json({
           success: true,
-          message: `Successfully reloaded ${promptsData.length} prompts and ${categories.length} categories`,
+          message: `Successfully refreshed the server with ${promptsData.length} prompts and ${categories.length} categories`,
           data: {
             promptsCount: promptsData.length,
             categoriesCount: categories.length,
             convertedPromptsCount: convertedPrompts.length
           }
         });
-      } catch (reloadError) {
+      } catch (refreshError) {
+        log.error("Error refreshing server:", refreshError);
         return res.status(500).json({
-          error: "Failed to reload prompts",
-          details: reloadError instanceof Error ? reloadError.message : String(reloadError)
+          success: false,
+          message: `Failed to refresh server: ${refreshError instanceof Error ? refreshError.message : String(refreshError)}`
         });
       }
     } catch (error) {
       log.error("Error handling reload_prompts API request:", error);
       return res.status(500).json({
-        error: "Internal server error",
-        details: error instanceof Error ? error.message : String(error)
+        success: false,
+        message: "Internal server error"
       });
     }
   });
@@ -2645,10 +2992,28 @@ async function loadCategoryPrompts(configPath: string): Promise<{ promptsData: P
   try {
     // Read the promptsConfig.json file
     const configContent = await readFile(configPath, "utf8");
-    const promptsConfig = JSON.parse(configContent) as PromptsConfigFile;
+    let promptsConfig: PromptsConfigFile;
+    
+    try {
+      promptsConfig = JSON.parse(configContent) as PromptsConfigFile;
+    } catch (jsonError) {
+      log.error(`Error parsing config file ${configPath}:`, jsonError);
+      throw new Error(`Invalid JSON in config file: ${jsonError instanceof Error ? jsonError.message : String(jsonError)}`);
+    }
+    
+    // Ensure required properties exist
+    if (!promptsConfig.categories) {
+      log.warn(`Config file ${configPath} does not have a 'categories' array. Initializing it.`);
+      promptsConfig.categories = [];
+    }
+    
+    if (!promptsConfig.imports || !Array.isArray(promptsConfig.imports)) {
+      log.warn(`Config file ${configPath} does not have a valid 'imports' array. Initializing it.`);
+      promptsConfig.imports = [];
+    }
     
     // Get the categories from the config
-    const categories = promptsConfig.categories || [];
+    const categories = promptsConfig.categories;
     
     // Initialize an array to store all prompts
     let allPrompts: PromptData[] = [];
@@ -2670,17 +3035,42 @@ async function loadCategoryPrompts(configPath: string): Promise<{ promptsData: P
           await fs.mkdir(dir, { recursive: true });
           
           // Create an empty prompts file
-          await writeFile(fullImportPath, JSON.stringify({ prompts: [] }, null, 2), "utf8");
+          await safeWriteFile(fullImportPath, JSON.stringify({ prompts: [] }, null, 2), "utf8");
         }
         
         // Read the file
         const fileContent = await readFile(fullImportPath, "utf8");
-        const categoryPromptsFile = JSON.parse(fileContent);
+        let categoryPromptsFile: any;
         
-        if (categoryPromptsFile.prompts && Array.isArray(categoryPromptsFile.prompts)) {
+        try {
+          categoryPromptsFile = JSON.parse(fileContent);
+        } catch (jsonError) {
+          log.error(`Error parsing import file ${importPath}:`, jsonError);
+          log.info(`Creating empty prompts file for ${importPath} due to parsing error.`);
+          categoryPromptsFile = { prompts: [] };
+          await safeWriteFile(fullImportPath, JSON.stringify(categoryPromptsFile, null, 2), "utf8");
+        }
+        
+        // Ensure prompts property exists and is an array
+        if (!categoryPromptsFile.prompts) {
+          log.warn(`Import file ${importPath} does not have a 'prompts' array. Initializing it.`);
+          categoryPromptsFile.prompts = [];
+          await safeWriteFile(fullImportPath, JSON.stringify(categoryPromptsFile, null, 2), "utf8");
+        } else if (!Array.isArray(categoryPromptsFile.prompts)) {
+          log.warn(`Import file ${importPath} has an invalid 'prompts' property (not an array). Resetting it.`);
+          categoryPromptsFile.prompts = [];
+          await safeWriteFile(fullImportPath, JSON.stringify(categoryPromptsFile, null, 2), "utf8");
+        }
+        
           // Update the file path to be relative to the category folder
           const categoryPath = path.dirname(importPath);
           const categoryPrompts = categoryPromptsFile.prompts.map((prompt: PromptData) => {
+          // Ensure prompt has all required properties
+          if (!prompt.id || !prompt.name || !prompt.file) {
+            log.warn(`Skipping invalid prompt in ${importPath}: missing required properties`);
+            return null;
+          }
+          
             // If the file path is already absolute or starts with the category folder, keep it as is
             if (prompt.file.startsWith('/') || prompt.file.startsWith(categoryPath)) {
               return prompt;
@@ -2691,11 +3081,10 @@ async function loadCategoryPrompts(configPath: string): Promise<{ promptsData: P
               ...prompt,
               file: path.join(categoryPath, prompt.file)
             };
-          });
+        }).filter(Boolean); // Remove any null entries (invalid prompts)
           
           // Add the prompts to the array
           allPrompts = [...allPrompts, ...categoryPrompts];
-        }
       } catch (error) {
         log.error(`Error loading prompts from ${importPath}:`, error);
       }
@@ -2707,3 +3096,251 @@ async function loadCategoryPrompts(configPath: string): Promise<{ promptsData: P
     throw error;
   }
 }
+
+// Helper function to clear the require cache
+function clearRequireCache() {
+  // Get all cached module paths
+  const cachedModulePaths = Object.keys(require.cache);
+  
+  // Filter for prompt files and configs
+  const promptPaths = cachedModulePaths.filter(modulePath => 
+    modulePath.includes('prompts/') || 
+    modulePath.includes('prompts.json') || 
+    modulePath.endsWith('.md')
+  );
+  
+  // Clear them from cache
+  promptPaths.forEach(modulePath => {
+    delete require.cache[modulePath];
+    log.debug(`Cleared from require cache: ${modulePath}`);
+  });
+  
+  log.info(`Cleared ${promptPaths.length} prompt-related modules from require cache`);
+}
+
+// Add this function after the reRegisterAllPrompts function
+
+/**
+ * Completely refreshes the server's prompt registry and routing table
+ * This is more comprehensive than just reloading prompts and re-registering them
+ * It ensures that all caches are cleared and all routes are re-registered
+ */
+async function fullServerRefresh(): Promise<void> {
+  try {
+    log.info("Performing full server refresh...");
+    
+    // Step 1: Clear all caches
+    clearRequireCache();
+    
+    // Step 2: Clear server-side caches if available
+    if (typeof (server as any).clearCache === 'function') {
+      try {
+        (server as any).clearCache();
+        log.info("Cleared server-side prompt cache");
+      } catch (cacheClearError) {
+        log.warn("Could not clear server-side cache:", cacheClearError);
+      }
+    }
+    
+    // Step 3: Unregister all existing prompts if possible
+    if (typeof (server as any).unregisterAllPrompts === 'function') {
+      try {
+        (server as any).unregisterAllPrompts();
+        log.info("Unregistered all existing prompts");
+      } catch (unregisterError) {
+        log.warn("Could not unregister existing prompts:", unregisterError);
+      }
+    }
+    
+    // Step 4: Reload all prompts from disk
+    const result = await reloadPrompts();
+    log.info(`Reloaded ${result.promptsData.length} prompts from disk`);
+    
+    // Step 5: Re-register all prompts with the server
+    await reRegisterAllPrompts(result.convertedPrompts);
+    log.info(`Re-registered ${result.convertedPrompts.length} prompts with the server`);
+    
+    // Step 6: Force garbage collection if available (helps with memory usage)
+    if (global.gc) {
+      try {
+        global.gc();
+        log.info("Forced garbage collection");
+      } catch (gcError) {
+        log.warn("Could not force garbage collection:", gcError);
+      }
+    }
+    
+    // Step 7: Notify that refresh is complete
+    log.info("Full server refresh completed successfully");
+  } catch (error) {
+    log.error("Error during full server refresh:", error);
+    throw error;
+  }
+}
+
+// Helper function to trigger a server refresh via the API
+async function triggerServerRefresh(restart: boolean = false, reason: string = ""): Promise<void> {
+  try {
+    log.info(`Triggering server refresh via API${restart ? ' with restart' : ''}`);
+    
+    // Make a request to the reload_prompts API endpoint
+    const response = await fetch(`http://localhost:${config.server.port || 9090}/api/v1/tools/reload_prompts`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        restart: restart,
+        reason: reason
+      })
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      log.error(`Server refresh API call failed: ${errorData.message || response.statusText}`);
+    } else {
+      const result = await response.json();
+      log.info(`Server refresh API call succeeded: ${result.message}`);
+    }
+  } catch (error) {
+    log.error("Error triggering server refresh via API:", error);
+    // Fall back to direct refresh if API call fails
+    try {
+      await fullServerRefresh();
+      log.info("Completed direct server refresh after API call failed");
+      
+      // If restart was requested, also handle that
+      if (restart) {
+        await handleServerRestart(reason);
+      }
+    } catch (directRefreshError) {
+      log.error("Direct server refresh also failed:", directRefreshError);
+    }
+  }
+}
+
+// Add this after the other tool definitions
+
+// Add this function to handle server restart
+async function handleServerRestart(reason: string): Promise<void> {
+  try {
+    log.info(`Initiating server restart: ${reason}`);
+    
+    // First, perform a full server refresh to ensure all prompts are up to date
+    try {
+      await fullServerRefresh();
+      log.info("Completed full server refresh before restart");
+    } catch (refreshError) {
+      log.error("Error refreshing server before restart:", refreshError);
+      // Continue with restart even if refresh fails
+    }
+    
+    // Schedule the actual restart after a short delay
+    setTimeout(() => {
+      try {
+        // Close all connections and shut down the server gracefully
+        if (server && typeof (server as any).close === 'function') {
+          (server as any).close(() => {
+            log.info("Server closed successfully, restarting...");
+            
+            // Use the Node.js process manager to restart
+            if (process.send) {
+              // If running under a process manager like PM2
+              process.send('restart');
+            } else {
+              // Otherwise, exit with a special code that can be caught by a wrapper script
+              log.info("Exiting with restart code 100");
+              process.exit(100);
+            }
+          });
+        } else {
+          log.warn("Server close method not available, using direct exit");
+          process.exit(100);
+        }
+      } catch (error) {
+        log.error("Error during server restart:", error);
+        process.exit(1);
+      }
+    }, 1000);
+  } catch (error) {
+    log.error("Error in handleServerRestart:", error);
+    throw error;
+  }
+}
+
+// Register the reload_prompts tool
+server.tool(
+  "reload_prompts",
+  {
+    restart: z.boolean().optional().describe("Whether to restart the server after reloading prompts"),
+    reason: z.string().optional().describe("Optional reason for reloading/restarting")
+  },
+  async ({ restart, reason }, extra) => {
+    try {
+      const reloadReason = reason || "Manual reload requested";
+      log.info(`Reload prompts request received${restart ? ' with restart' : ''}: ${reloadReason}`);
+      
+      // First, perform a full server refresh
+      try {
+        await fullServerRefresh();
+        log.info("Completed full server refresh");
+      } catch (refreshError) {
+        log.error("Error refreshing server:", refreshError);
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Error refreshing server: ${refreshError instanceof Error ? refreshError.message : String(refreshError)}`
+            }
+          ],
+          isError: true
+        };
+      }
+      
+      // If restart is requested, handle it
+      if (restart) {
+        // Send a response before initiating the restart
+        const response = {
+          content: [
+            {
+              type: "text" as const,
+              text: `Successfully reloaded ${promptsData.length} prompts from ${categories.length} categories.\n\nServer is now restarting. Reason: ${reloadReason}\n\nThe server will be back online in a few seconds. You may need to refresh your client.`
+            }
+          ]
+        };
+        
+        // Schedule the restart to happen after the response is sent
+        setTimeout(async () => {
+          try {
+            await handleServerRestart(reloadReason);
+          } catch (error) {
+            log.error("Error handling server restart:", error);
+          }
+        }, 1000);
+        
+        return response;
+      }
+      
+      // Normal response without restart
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Successfully reloaded ${promptsData.length} prompts from ${categories.length} categories.`
+          }
+        ]
+      };
+    } catch (error) {
+      log.error("Error in reload_prompts tool:", error);
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Failed to reload prompts: ${error instanceof Error ? error.message : String(error)}`
+          }
+        ],
+        isError: true
+      };
+    }
+  }
+);

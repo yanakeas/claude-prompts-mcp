@@ -132,6 +132,39 @@
           }
         }
       ]
+    },
+    {
+      "id": "query_refinement",
+      "name": "Query Refinement",
+      "category": "analysis",
+      "description": "A systematic process to analyze and refine ambiguous coding requests into clear, actionable specifications.",
+      "file": "query_refinement.md",
+      "arguments": [
+        {
+          "name": "query",
+          "description": "The original user query to refine",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "test_analyzer",
+      "name": "Test Analyzer",
+      "category": "analysis",
+      "description": "A test prompt for content analysis with configurable depth",
+      "file": "test_analyzer.md",
+      "arguments": [
+        {
+          "name": "content",
+          "description": "The content to be analyzed",
+          "required": true
+        },
+        {
+          "name": "depth",
+          "description": "The depth of analysis (basic, detailed, or comprehensive)",
+          "required": false
+        }
+      ]
     }
   ]
-} 
+}

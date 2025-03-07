@@ -28,6 +28,20 @@
           "required": true
         }
       ]
+    },
+    {
+      "id": "//test_prompt_general",
+      "name": "Test Prompt General",
+      "category": "general",
+      "description": "A basic test prompt template in the General category",
+      "file": "//test_prompt_general.md",
+      "arguments": [
+        {
+          "name": "input",
+          "description": "The user's input to test",
+          "required": true
+        }
+      ]
     }
   ]
-} 
+}
