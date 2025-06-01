@@ -40,3 +40,6 @@ tests/
 
 # Admin UI (temporary)
 admin-ui/ 
+
+#Ignore cursor AI rules
+.cursor\rules\codacy.mdc

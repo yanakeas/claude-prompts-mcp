@@ -1,0 +1,21 @@
+{
+  "schema_version": "v1",
+  "name_for_human": "Prompt Library",
+  "name_for_model": "prompt_library",
+  "description_for_human": "Create, manage, and execute prompt templates for content generation and analysis.",
+  "description_for_model": "You can use this plugin to manage a library of prompt templates. You can list, get, create, update, and delete prompts, as well as modify sections of existing prompts. You can also use the chat endpoint to execute prompts with variables. The system supports references for handling long texts and prompt chains for multi-step workflows.",
+  "auth": {
+    "type": "service_http",
+    "authorization_type": "bearer",
+    "verification_tokens": {
+      "openai": "your-openai-verification-token"
+    }
+  },
+  "api": {
+    "type": "openapi",
+    "url": "https://your-api-url.com/.well-known/openapi.yaml"
+  },
+  "logo_url": "https://your-api-url.com/logo.png",
+  "contact_email": "support@example.com",
+  "legal_info_url": "https://example.com/legal"
+}

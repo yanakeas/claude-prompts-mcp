@@ -1,0 +1,557 @@
+openapi: 3.1.0
+info:
+  title: Prompt Library API
+  description: API for creating, updating, and executing prompt templates
+  version: 1.0.0
+servers:
+  - url: https://your-api-url.com
+    description: Production server
+  - url: http://localhost:3456
+    description: Local development server
+paths:
+  /v1/prompts:
+    get:
+      operationId: list_prompts
+      summary: List all prompts
+      description: Returns a list of all available prompts
+      parameters:
+        - name: filter
+          in: query
+          description: Filter prompts by text
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A list of prompts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  prompts:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PromptData"
+                  categories:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Category"
+                  count:
+                    type: integer
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /v1/prompts/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Unique identifier of the prompt
+
+    get:
+      operationId: get_prompt
+      summary: Get a specific prompt
+      description: Returns details of a specific prompt
+      responses:
+        "200":
+          description: Prompt details
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PromptData"
+                  - type: object
+                    properties:
+                      content:
+                        type: string
+                        description: Raw markdown content of the prompt
+                      sections:
+                        type: object
+                        additionalProperties:
+                          type: string
+                        description: Parsed sections of the prompt markdown
+        "404":
+          description: Prompt not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+    put:
+      operationId: update_prompt
+      summary: Create or update a prompt
+      description: Creates a new prompt or updates an existing one
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PromptUpdate"
+      responses:
+        "200":
+          description: Prompt updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  prompt:
+                    $ref: "#/components/schemas/PromptData"
+        "400":
+          description: Invalid prompt data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+    delete:
+      operationId: delete_prompt
+      summary: Delete a prompt
+      description: Deletes a prompt by its ID
+      responses:
+        "200":
+          description: Prompt deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+        "404":
+          description: Prompt not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+    patch:
+      operationId: modify_prompt_section
+      summary: Modify a section of a prompt
+      description: Updates a specific section of a prompt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - section_name
+                - new_content
+              properties:
+                section_name:
+                  type: string
+                  description: Name of the section to modify
+                new_content:
+                  type: string
+                  description: New content for the section
+      responses:
+        "200":
+          description: Section modified successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  promptData:
+                    $ref: "#/components/schemas/PromptData"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Prompt or section not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /v1/references:
+    post:
+      operationId: store_reference
+      summary: Store a text reference
+      description: Stores a long text as a reference and returns a token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - content
+              properties:
+                content:
+                  type: string
+                  description: Text content to store
+                title:
+                  type: string
+                  description: Optional title for the reference
+      responses:
+        "200":
+          description: Reference stored successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  token:
+                    type: string
+                    description: Reference token for retrieving the text
+                  message:
+                    type: string
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /v1/references/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Reference ID
+
+    get:
+      operationId: get_reference
+      summary: Get a text reference
+      description: Returns the content of a stored text reference
+      responses:
+        "200":
+          description: Reference retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  content:
+                    type: string
+                    description: The stored text content
+                  message:
+                    type: string
+        "404":
+          description: Reference not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /v1/chat:
+    post:
+      operationId: chat
+      summary: Perform a chat completion
+      description: Send messages to OpenAI and get a streaming response
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - messages
+              properties:
+                messages:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/Message"
+                  description: Array of message objects
+      responses:
+        "200":
+          description: Streaming response
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: Server-sent events containing response chunks
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/functions:
+    post:
+      operationId: execute_function
+      summary: Execute a function directly
+      description: Call a function by name with arguments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  description: Function name to execute
+                arguments:
+                  type: object
+                  additionalProperties: true
+                  description: Function arguments
+      responses:
+        "200":
+          description: Function executed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Function result
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Function not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  schemas:
+    PromptData:
+      type: object
+      required:
+        - id
+        - name
+        - category
+        - description
+        - file
+        - arguments
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the prompt
+        name:
+          type: string
+          description: Display name for the prompt
+        category:
+          type: string
+          description: Category ID this prompt belongs to
+        category_name:
+          type: string
+          description: Display name of the category
+        description:
+          type: string
+          description: Description of the prompt
+        file:
+          type: string
+          description: File path or name
+        arguments:
+          type: array
+          items:
+            type: object
+            required:
+              - name
+              - required
+            properties:
+              name:
+                type: string
+                description: Argument name
+              description:
+                type: string
+                description: Argument description
+              required:
+                type: boolean
+                description: Whether the argument is required
+        isChain:
+          type: boolean
+          description: Whether this prompt is a chain of prompts
+        tools:
+          type: boolean
+          description: Whether this prompt uses tools
+
+    PromptUpdate:
+      type: object
+      required:
+        - name
+        - category
+        - description
+        - userMessageTemplate
+        - arguments
+      properties:
+        name:
+          type: string
+          description: Display name for the prompt
+        category:
+          type: string
+          description: Category this prompt belongs to
+        description:
+          type: string
+          description: Description of the prompt
+        systemMessage:
+          type: string
+          description: Optional system message for the prompt
+        userMessageTemplate:
+          type: string
+          description: Template for generating the user message
+        arguments:
+          type: array
+          items:
+            type: object
+            required:
+              - name
+              - required
+            properties:
+              name:
+                type: string
+                description: Argument name
+              description:
+                type: string
+                description: Argument description
+              required:
+                type: boolean
+                description: Whether the argument is required
+        isChain:
+          type: boolean
+          description: Whether this prompt is a chain of prompts
+        chainSteps:
+          type: array
+          items:
+            type: object
+            required:
+              - promptId
+              - stepName
+            properties:
+              promptId:
+                type: string
+                description: ID of the prompt to execute in this step
+              stepName:
+                type: string
+                description: Name of this step
+              inputMapping:
+                type: object
+                additionalProperties:
+                  type: string
+                description: Maps chain inputs to this step's inputs
+              outputMapping:
+                type: object
+                additionalProperties:
+                  type: string
+                description: Maps this step's outputs to chain outputs
+
+    Category:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the category
+        name:
+          type: string
+          description: Display name for the category
+        description:
+          type: string
+          description: Description of the category
+
+    Message:
+      type: object
+      required:
+        - role
+      properties:
+        role:
+          type: string
+          enum: [system, user, assistant, tool]
+          description: The role of the message sender
+        content:
+          type: string
+          description: The content of the message
+        tool_call_id:
+          type: string
+          description: Optional ID of the tool call this message is responding to
+        tool_calls:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              type:
+                type: string
+                enum: [function]
+              function:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  arguments:
+                    type: string
+
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Error message
+
+  responses:
+    Error:
+      description: Error response
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      name: x-api-key
+      in: header
+
+security:
+  - apiKey: []
