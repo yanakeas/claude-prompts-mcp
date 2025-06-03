@@ -87,7 +87,7 @@ Each argument has the following properties:
 
 ## Example Prompt
 
-```markdown
+````markdown
 # Code Review
 
 This prompt helps Claude review code and provide feedback.
@@ -103,8 +103,10 @@ Please review the following {{language}} code:
 ```{{language}}
 {{code}}
 ```
+````
 
 Focus on:
+
 - Code quality
 - Potential bugs
 - Performance issues
@@ -120,7 +122,8 @@ Also check for adherence to {{language}} best practices.
 - language: The programming language of the code (e.g., JavaScript, Python, etc.)
 - code: The code snippet to review
 - best_practices: Whether to check for language-specific best practices (optional)
-```
+
+````
 
 ## Chain Prompt Format
 
@@ -143,25 +146,78 @@ Chain prompts include an additional section that defines the steps in the chain:
      depth: exploration_depth
    outputMapping:
      detailedFindings: detailed_results
-```
+````
 
 Each step includes:
+
 1. **promptId**: The ID of the prompt to execute
 2. **stepName**: A descriptive name for the step
 3. **inputMapping**: How to map chain inputs to step inputs
 4. **outputMapping**: How to map step outputs to chain outputs
 
-## Conditional Logic
+## Advanced Templating with Nunjucks (Replacing Conditional Logic)
 
-The template system supports basic conditional logic using Handlebars-style syntax:
+The template system now uses **Nunjucks** for advanced templating features, providing more power and flexibility than the previous Handlebars-style syntax. This allows for conditional logic, loops, and more, directly within your prompt templates.
 
-```
-{{#if condition}}
-  Content to include if condition is true
-{{else}}
-  Content to include if condition is false
-{{/if}}
-```
+### Key Nunjucks Features:
+
+- **Conditional Logic (`{% if %}` ... `{% else %}` ... `{% endif %}`):**
+  Control which parts of your template are rendered based on the presence or value of arguments.
+
+  ```nunjucks
+  {% if user_role == "admin" %}
+  Welcome, Admin! You have full access.
+  {% elif user_role == "editor" %}
+  Welcome, Editor! You can manage content.
+  {% else %}
+  Welcome, {{user_name | default("Guest")}}!
+  {% endif %}
+  ```
+
+- **Loops (`{% for %}` ... `{% endfor %}`):**
+  Iterate over arrays or lists. If you pass an argument that is an array (e.g., from a JSON object in your calling code), Nunjucks can loop through it.
+
+  ```nunjucks
+  Your selected topics:
+  {% for topic in selected_topics %}
+  - {{ topic }}
+  {% else %}
+  No topics selected.
+  {% endfor %}
+  ```
+
+  _(Note: Ensure list/array arguments are passed in a format Nunjucks can iterate, e.g., as actual arrays in the context.)_
+
+- **Standard Variable Placeholders (`{{variable}}`):**
+  Simple variable replacement is handled by Nunjucks as well.
+
+  ```nunjucks
+  The current task is: {{task_description}}.
+  ```
+
+- \*\*Filters (`{{ variable | filter }}`):
+  Nunjucks offers many built-in filters (e.g., `{{ name | lower }}`, `{{ items | length }}`, `{{ title | default("Untitled") }}`) and custom filters can be added globally if needed.
+
+* **Macros (`{% macro %}`), Template Inheritance (`{% extends %}`), and Setting Variables (`{% set %}`):**
+  Nunjucks also supports defining reusable macros, template inheritance for creating base templates, and setting temporary variables within templates. These powerful features allow for highly modular and maintainable prompt designs.
+
+  ```nunjucks
+  {# Example of setting a variable #}
+  {% set greeting = "Hello" %}
+  {% if hour > 12 %}{% set greeting = "Good afternoon" %}{% endif %}
+  {{ greeting }}, {{ user_name }}!
+
+  {# For macros and inheritance, refer to detailed examples and Nunjucks documentation #}
+  ```
+
+  For detailed examples and usage of these advanced features, please see the [Prompt Management](prompt-management.md) guide or the [official Nunjucks documentation](https://mozilla.github.io/nunjucks/templating.html).
+
+### Processing Order:
+
+1.  The entire template is processed by Nunjucks, resolving all Nunjucks tags (`{% ... %}`) and variable placeholders (`{{ ... }}`).
+2.  After Nunjucks processing, any text references (e.g., `ref:xyz` for long arguments) are expanded to their full content.
+
+For more details on Nunjucks syntax and features, refer to the official [Nunjucks documentation](https://mozilla.github.io/nunjucks/templating.html).
 
 ## File Organization
 
@@ -219,9 +275,10 @@ For arguments that may contain multiple paragraphs, use triple backticks in the 
 ## User Message Template
 
 Please analyze the following text:
-
 ```
+
 {{long_text}}
+
 ```
 
 ## Arguments
@@ -246,4 +303,4 @@ Please provide a brief overview of {{topic}}, highlighting only the key points.
 
 - topic: The subject to analyze
 - detailed: Whether to provide a detailed analysis (true/false)
-``` 
+```

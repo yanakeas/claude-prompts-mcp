@@ -161,6 +161,8 @@ export interface PromptData {
   arguments: PromptArgument[];
   /** Whether this prompt should use available tools */
   tools?: boolean;
+  /** Defines behavior when prompt is invoked without its defined arguments */
+  onEmptyInvocation?: "execute_if_possible" | "return_template";
 }
 
 /**

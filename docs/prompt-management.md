@@ -27,13 +27,13 @@ The main configuration file defines all available categories and specifies which
       "id": "code",
       "name": "Code",
       "description": "Prompts related to programming and software development"
-    },
+    }
     // More categories...
   ],
   "imports": [
     "prompts/general/prompts.json",
     "prompts/code/prompts.json",
-    "prompts/analysis/prompts.json",
+    "prompts/analysis/prompts.json"
     // More imports...
   ]
 }
@@ -71,7 +71,7 @@ Each category has its own prompts.json file in its directory (e.g., `prompts/gen
           "required": false
         }
       ]
-    },
+    }
     // More prompts...
   ]
 }
@@ -91,6 +91,127 @@ Each prompt in the `prompts` array has:
 - `isChain` (boolean, optional) - Whether this prompt is a chain of prompts
 - `chainSteps` (array, optional) - Steps in the chain if this is a chain prompt
 - `tools` (boolean, optional) - Whether this prompt should use available tools
+- `onEmptyInvocation` (string, optional) - Defines behavior when a prompt is invoked without its defined arguments.
+  - `"return_template"`: If invoked with no arguments, the server returns a description of the prompt, its purpose, and its arguments instead of attempting to execute it. This is useful for prompts that strictly require specific inputs.
+  - `"execute_if_possible"` (default): If invoked with no arguments, the server attempts to execute the prompt, typically by using contextual information (like `{{previous_message}}`) for any missing arguments. This is the standard behavior if the field is omitted.
+
+## Advanced Templating with Nunjucks
+
+The prompt templating engine now supports **Nunjucks**, a powerful templating language that allows for more dynamic and flexible prompt construction. This is in addition to the standard `{{variable}}` placeholder replacement.
+
+### Key Nunjucks Features Available:
+
+- **Conditional Logic (`{% if %}`):** Show or hide parts of your prompt based on whether arguments are provided or have specific values.
+- **Loops (`{% for %}`):** Iterate over lists or arrays provided as arguments to dynamically generate parts of your prompt.
+- **Standard Placeholder Syntax:** The familiar `{{variable}}` syntax for simple variable replacement continues to work as before. Nunjucks handles these as well.
+
+### How Nunjucks is Processed:
+
+1.  **Nunjucks Rendering:** The entire `User Message Template` (and `System Message` if applicable) is first processed by Nunjucks. This means all `{% ... %}` tags and `{{ ... }}` placeholders are evaluated by Nunjucks using the provided arguments and special context variables (like `{{previous_message}}`, `{{tools_available}}`).
+2.  **Text Reference Expansion:** After Nunjucks has processed the template, the system then handles text reference expansion. If an argument's value was a long string that got converted to a `ref:xyz` placeholder by the `TextReferenceManager` (this happens before Nunjucks), Nunjucks will render `{{my_long_arg}}` to its `ref:xyz` value. Then, the existing reference replacement logic will swap `ref:xyz` with the actual long content.
+
+This two-step process ensures that Nunjucks logic operates on the argument values (or their reference IDs) and then the full text is assembled.
+
+### Examples:
+
+#### Conditional Logic:
+
+You can conditionally include text based on an argument:
+
+```nunjucks
+{% if user_name %}
+Hello, {{user_name}}! Thanks for providing your name.
+{% else %}
+Hello there!
+{% endif %}
+
+{% if task_details == "urgent" %}
+This is an URGENT task.
+{% endif %}
+```
+
+This is particularly useful for optional arguments.
+
+#### Simple Loops:
+
+If you have an argument that is a list (e.g., a JSON array passed as a string argument, which you might need to parse or ensure your Nunjucks context can handle as an iterable), you can loop through it:
+
+```nunjucks
+Please summarize the following points:
+{% for point in points_list %}
+- {{ point }}
+{% endfor %}
+```
+
+_(Note: For complex data types like lists passed as arguments, ensure they are correctly formatted and accessible within the Nunjucks context. Simple string arguments are directly available. For lists or objects, you might need to ensure they are passed as actual iterables/objects to Nunjucks if your setup supports it, or use Nunjucks filters to parse them if they are strings.)_
+
+### Using Standard Placeholders:
+
+Simple variable replacement still works as you'd expect:
+
+```nunjucks
+Your topic is: {{topic}}.
+```
+
+Nunjucks handles these standard placeholders.
+
+### Advanced Nunjucks Features:
+
+Beyond basic conditionals and loops, Nunjucks offers several advanced features to make your prompt templates even more modular and powerful:
+
+- **Macros (`{% macro %}`):** Define reusable chunks of template logic. This is great for standardizing parts of prompts or complex formatting.
+
+  ```nunjucks
+  {% macro user_card(user) %}
+  User Details:
+  Name: {{ user.name | default("N/A") }}
+  Email: {{ user.email | default("N/A") }}
+  {% if user.is_admin %}Admin User{% endif %}
+  {% endmacro %}
+
+  --- User 1 ---
+  {{ user_card(user1_data) }}
+  --- User 2 ---
+  {{ user_card(user2_data) }}
+  ```
+
+- **Template Inheritance (`{% extends %}`, `{% block %}`):** Create a base prompt template and then have other prompts extend it, overriding specific blocks. This requires Nunjucks to be configured with a file system loader (see Phase 3, Task 2 in the integration plan).
+
+  - `base_prompt.njk` (or `.md` if your loader is configured for it):
+    ```nunjucks
+    System: You are a helpful assistant.
+    User: {% block user_query %}Default user query.{% endblock %}
+    Context: {{ previous_message }}
+    ```
+  - `specific_task.njk`:
+    `nunjucks
+    {% extends "base_prompt.njk" %}
+    {% block user_query %}Please tell me about {{ topic }}.{% endblock %}
+    `
+    _(Note: The exact paths for `extends` will depend on how the Nunjucks file loader is configured.)_
+
+- **Filters (`|`):** Nunjucks provides many built-in filters (e.g., `lower`, `upper`, `length`, `join`, `default`, `sum`, `sort`) and allows for custom global filters to be added in the Nunjucks environment setup.
+
+  ```nunjucks
+  Topic: {{ topic_name | upper }}
+  Item count: {{ item_list | length }}
+  Backup: {{ backup_contact | default("admin@example.com") }}
+  ```
+
+- **Setting Variables (`{% set %}`):** You can define variables directly within your template for temporary use.
+  ```nunjucks
+  {% set task_priority = "High" %}
+  {% if user_level > 4 %}
+    {% set task_priority = "Critical" %}
+  {% endif %}
+  Current task priority: {{ task_priority }}
+  ```
+
+For a comprehensive list of tags and filters, refer to the [official Nunjucks documentation](https://mozilla.github.io/nunjucks/templating.html).
+
+---
+
+Each prompt in the `prompts` array has:
 
 ## Working with Prompts
 
@@ -128,17 +249,20 @@ Use the `create_category` tool to create a new category:
 
 ```javascript
 // Example: Creating a new category
-const response = await fetch('http://localhost:9090/api/v1/tools/create_category', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    id: 'my_category',
-    name: 'My Category',
-    description: 'A category for my custom prompts'
-  })
-});
+const response = await fetch(
+  "http://localhost:9090/api/v1/tools/create_category",
+  {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      id: "my_category",
+      name: "My Category",
+      description: "A category for my custom prompts",
+    }),
+  }
+);
 
 const result = await response.json();
 console.log(result);
@@ -156,32 +280,35 @@ Use the `update_prompt` tool to create a new prompt or update an existing one:
 
 ```javascript
 // Example: Creating a new prompt
-const response = await fetch('http://localhost:9090/api/v1/tools/update_prompt', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    id: 'my_prompt',
-    name: 'My Prompt',
-    category: 'my_category',
-    description: 'A custom prompt for my use case',
-    systemMessage: 'You are a helpful assistant.',
-    userMessageTemplate: 'Hello {{name}}, please help me with {{task}}.',
-    arguments: [
-      {
-        name: 'name',
-        description: 'The name to greet',
-        required: true
-      },
-      {
-        name: 'task',
-        description: 'The task to help with',
-        required: true
-      }
-    ]
-  })
-});
+const response = await fetch(
+  "http://localhost:9090/api/v1/tools/update_prompt",
+  {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      id: "my_prompt",
+      name: "My Prompt",
+      category: "my_category",
+      description: "A custom prompt for my use case",
+      systemMessage: "You are a helpful assistant.",
+      userMessageTemplate: "Hello {{name}}, please help me with {{task}}.",
+      arguments: [
+        {
+          name: "name",
+          description: "The name to greet",
+          required: true,
+        },
+        {
+          name: "task",
+          description: "The task to help with",
+          required: true,
+        },
+      ],
+    }),
+  }
+);
 
 const result = await response.json();
 console.log(result);
@@ -212,49 +339,52 @@ Chain prompts allow you to create a sequence of prompts that are executed in ord
 
 ```javascript
 // Example: Creating a chain prompt
-const response = await fetch('http://localhost:9090/api/v1/tools/update_prompt', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    id: 'my_chain_prompt',
-    name: 'My Chain Prompt',
-    category: 'my_category',
-    description: 'A chain prompt that processes data in multiple steps',
-    userMessageTemplate: 'Process the following data: {{data}}',
-    arguments: [
-      {
-        name: 'data',
-        description: 'The data to process',
-        required: true
-      }
-    ],
-    isChain: true,
-    chainSteps: [
-      {
-        promptId: 'step1_prompt',
-        stepName: 'Step 1: Analyze Data',
-        inputMapping: {
-          "input_data": "data"
+const response = await fetch(
+  "http://localhost:9090/api/v1/tools/update_prompt",
+  {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      id: "my_chain_prompt",
+      name: "My Chain Prompt",
+      category: "my_category",
+      description: "A chain prompt that processes data in multiple steps",
+      userMessageTemplate: "Process the following data: {{data}}",
+      arguments: [
+        {
+          name: "data",
+          description: "The data to process",
+          required: true,
         },
-        outputMapping: {
-          "analysis_result": "step1_result"
-        }
-      },
-      {
-        promptId: 'step2_prompt',
-        stepName: 'Step 2: Generate Recommendations',
-        inputMapping: {
-          "analysis": "step1_result"
+      ],
+      isChain: true,
+      chainSteps: [
+        {
+          promptId: "step1_prompt",
+          stepName: "Step 1: Analyze Data",
+          inputMapping: {
+            input_data: "data",
+          },
+          outputMapping: {
+            analysis_result: "step1_result",
+          },
         },
-        outputMapping: {
-          "recommendations": "final_recommendations"
-        }
-      }
-    ]
-  })
-});
+        {
+          promptId: "step2_prompt",
+          stepName: "Step 2: Generate Recommendations",
+          inputMapping: {
+            analysis: "step1_result",
+          },
+          outputMapping: {
+            recommendations: "final_recommendations",
+          },
+        },
+      ],
+    }),
+  }
+);
 
 const result = await response.json();
 console.log(result);
@@ -273,12 +403,15 @@ The markdown file follows this structure:
 # Prompt Name
 
 ## Description
+
 Prompt description
 
 ## System Message
+
 System message content
 
 ## User Message Template
+
 User message template content
 
 ## Chain Steps (only for chain prompts)
@@ -286,9 +419,9 @@ User message template content
 1. promptId: prompt_id
    stepName: Step Name
    inputMapping:
-     chain_input: step_input
+   chain_input: step_input
    outputMapping:
-     step_output: chain_output
+   step_output: chain_output
 ```
 
 ## Error Handling
@@ -296,6 +429,7 @@ User message template content
 Both tools return a JSON response with the following structure:
 
 - Success:
+
   ```json
   {
     "content": [
@@ -318,4 +452,4 @@ Both tools return a JSON response with the following structure:
     ],
     "isError": true
   }
-  ``` 
+  ```

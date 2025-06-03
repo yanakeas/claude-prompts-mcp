@@ -23,7 +23,7 @@ Before you begin, ensure you have the following installed:
 If you have Git installed, you can clone the repository:
 
 ```bash
-git clone https://github.com/yourusername/claude-prompts.git
+git clone https://github.com/minipuft/claude-prompts.git
 cd claude-prompts
 ```
 
@@ -108,10 +108,7 @@ The prompts configuration is distributed across multiple files:
       "description": "Prompts related to programming and software development"
     }
   ],
-  "imports": [
-    "prompts/general/prompts.json",
-    "prompts/code/prompts.json"
-  ]
+  "imports": ["prompts/general/prompts.json", "prompts/code/prompts.json"]
 }
 ```
 
@@ -303,4 +300,4 @@ Refer to the other documentation files for more detailed information on specific
 - [Prompt Format Guide](prompt-format-guide.md)
 - [Chain Execution Guide](chain-execution-guide.md)
 - [API Endpoints Reference](api-endpoints-reference.md)
-- [Index.ts Reference](index-ts-reference.md) 
+- [Index.ts Reference](index-ts-reference.md)

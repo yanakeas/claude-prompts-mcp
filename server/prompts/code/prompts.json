@@ -10,14 +10,15 @@
         {
           "name": "code",
           "description": "The code to be reviewed",
-          "required": false
+          "required": true
         },
         {
           "name": "language",
           "description": "The programming language of the code",
           "required": false
         }
-      ]
+      ],
+      "onEmptyInvocation": "return_template"
     }
   ]
-} 
+}

@@ -54,6 +54,11 @@
       "id": "writing",
       "name": "Writing",
       "description": "Prompts related to writing and content creation"
+    },
+    {
+      "id": "examples",
+      "name": "Examples",
+      "description": "Example prompts demonstrating various features and techniques, including Nunjucks."
     }
   ],
   "prompts": [],
@@ -68,6 +73,7 @@
     "prompts/testing/prompts.json",
     "prompts/obsidian/prompts.json",
     "prompts/documentation/prompts.json",
-    "prompts/writing/prompts.json"
+    "prompts/writing/prompts.json",
+    "prompts/examples/prompts.json"
   ]
 }

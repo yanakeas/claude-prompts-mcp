@@ -47,13 +47,8 @@
       "category": "analysis",
       "description": "Refine existing notes by improving organization, flow, and clarity without adding or modifying the content.",
       "file": "note_refinement.md",
-      "arguments": [
-        {
-          "name": "notes",
-          "description": "The notes to be refined and reorganized",
-          "required": false
-        }
-      ]
+      "arguments": [],
+      "onEmptyInvocation": "return_template"
     },
     {
       "id": "note_integration",
