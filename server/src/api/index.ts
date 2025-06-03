@@ -10,7 +10,7 @@ import { ConfigManager } from "../config/index.js";
 import { Logger } from "../logging/index.js";
 import { McpToolsManager } from "../mcp-tools/index.js";
 import { PromptManager } from "../prompts/index.js";
-import { modifyPromptSection } from "../promptUtils.js";
+import { modifyPromptSection } from "../prompts/promptUtils.js";
 import { Category, PromptData, PromptsFile } from "../types/index.js";
 
 /**

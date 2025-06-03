@@ -9,7 +9,7 @@ import path from "path";
 import { z } from "zod";
 import { ConfigManager } from "../config/index.js";
 import { Logger } from "../logging/index.js";
-import { modifyPromptSection, safeWriteFile } from "../promptUtils.js";
+import { modifyPromptSection, safeWriteFile } from "../prompts/promptUtils.js";
 import {
   ConvertedPrompt,
   PromptData,

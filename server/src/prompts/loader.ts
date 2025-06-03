@@ -7,12 +7,12 @@ import * as fs from "fs/promises";
 import { readFile } from "fs/promises";
 import path from "path";
 import { Logger } from "../logging/index.js";
-import { safeWriteFile } from "../promptUtils.js";
 import {
   CategoryPromptsResult,
   PromptData,
   PromptsConfigFile,
 } from "../types/index.js";
+import { safeWriteFile } from "./promptUtils.js";
 
 /**
  * Prompt Loader class

@@ -8,6 +8,7 @@ yarn-error.log
 server/dist/
 build/
 out/
+server/package-lock.json
 
 # Environment variables
 server/.env
