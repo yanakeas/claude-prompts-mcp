@@ -105,87 +105,121 @@ export class ApplicationOrchestrator {
    * This is more robust for different execution contexts (direct execution vs Claude Desktop)
    */
   private async determineServerRoot(): Promise<string> {
-    const strategies = [];
+    // Check for debug/verbose logging flags
+    const args = process.argv.slice(2);
+    const isVerbose =
+      args.includes("--verbose") || args.includes("--debug-startup");
+    const isQuiet = args.includes("--quiet");
 
-    // Strategy 0: Environment variable override (highest priority)
+    // Early termination: If environment variable is set, use it immediately
     if (process.env.MCP_SERVER_ROOT) {
-      strategies.push({
-        name: "MCP_SERVER_ROOT environment variable",
-        path: process.env.MCP_SERVER_ROOT,
-        source: `env: ${process.env.MCP_SERVER_ROOT}`,
-      });
+      const envPath = path.resolve(process.env.MCP_SERVER_ROOT);
+      try {
+        const configPath = path.join(envPath, "config.json");
+        const fs = await import("fs/promises");
+        await fs.access(configPath);
+
+        if (!isQuiet) {
+          console.error(`✓ SUCCESS: MCP_SERVER_ROOT environment variable`);
+          console.error(`  Path: ${envPath}`);
+          console.error(`  Config found: ${configPath}`);
+        }
+        return envPath;
+      } catch (error) {
+        if (isVerbose) {
+          console.error(`✗ WARNING: MCP_SERVER_ROOT env var set but invalid`);
+          console.error(`  Tried path: ${envPath}`);
+          console.error(
+            `  Error: ${error instanceof Error ? error.message : String(error)}`
+          );
+          console.error(`  Falling back to automatic detection...`);
+        }
+      }
     }
 
-    // Strategy 1: Use process.argv[1] (the executed script path)
-    // This works when launched via Claude Desktop as it points to the actual script
+    // Build strategies in optimal order (most likely to succeed first)
+    const strategies = [];
+
+    // Strategy 1: process.argv[1] script location (most successful in Claude Desktop)
     if (process.argv[1]) {
       const scriptPath = process.argv[1];
 
-      // If we're in a dist directory, go up to server root
-      if (scriptPath.includes(path.sep + "dist" + path.sep)) {
-        strategies.push({
-          name: "process.argv[1] (accounting for dist)",
-          path: path.dirname(path.dirname(path.dirname(scriptPath))), // Go up from dist to server root
-          source: `script in dist: ${scriptPath}`,
-        });
-      }
-
+      // Primary strategy: Direct script location to server root
       strategies.push({
         name: "process.argv[1] script location",
         path: path.dirname(path.dirname(scriptPath)), // Go up from dist to server root
         source: `script: ${scriptPath}`,
+        priority: "high",
       });
+
+      // Secondary strategy: If we're specifically in a dist directory
+      if (scriptPath.includes(path.sep + "dist" + path.sep)) {
+        strategies.push({
+          name: "process.argv[1] (dist-aware)",
+          path: path.dirname(path.dirname(scriptPath)), // Fixed: go up 2 levels, not 3
+          source: `script in dist: ${scriptPath}`,
+          priority: "high",
+        });
+      }
     }
 
-    // Strategy 2: Use import.meta.url (current module location)
+    // Strategy 2: import.meta.url (current module location) - reliable fallback
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = path.dirname(__filename);
     strategies.push({
       name: "import.meta.url relative",
       path: path.join(__dirname, "..", ".."),
       source: `module: ${__filename}`,
+      priority: "medium",
     });
 
-    // Strategy 3: Use process.cwd() as fallback
-    strategies.push({
-      name: "process.cwd()",
-      path: process.cwd(),
-      source: `cwd: ${process.cwd()}`,
-    });
-
-    // Strategy 4: Common Claude Desktop working directories
-    const potentialPaths = [
-      path.join(process.cwd(), "server"),
-      path.join(process.cwd(), "..", "server"),
-      path.join(__dirname, "..", "..", ".."),
+    // Strategy 3: Common Claude Desktop patterns (ordered by likelihood)
+    const commonPaths = [
+      { path: path.join(process.cwd(), "server"), desc: "cwd/server" },
+      { path: process.cwd(), desc: "cwd" },
+      { path: path.join(process.cwd(), "..", "server"), desc: "parent/server" },
+      { path: path.join(__dirname, "..", "..", ".."), desc: "module parent" },
     ];
 
-    for (const potentialPath of potentialPaths) {
+    for (const { path: commonPath, desc } of commonPaths) {
       strategies.push({
-        name: "common path guess",
-        path: potentialPath,
-        source: `guessed: ${potentialPath}`,
+        name: `common pattern (${desc})`,
+        path: commonPath,
+        source: `pattern: ${commonPath}`,
+        priority: "low",
       });
     }
 
-    console.error("=== SERVER ROOT DETECTION STRATEGIES ===");
-    console.error(`Environment: process.cwd() = ${process.cwd()}`);
-    console.error(`Environment: process.argv[0] = ${process.argv[0]}`);
-    console.error(
-      `Environment: process.argv[1] = ${process.argv[1] || "undefined"}`
-    );
-    console.error(
-      `Environment: __filename = ${fileURLToPath(import.meta.url)}`
-    );
-    console.error(
-      `Environment: MCP_SERVER_ROOT = ${
-        process.env.MCP_SERVER_ROOT || "undefined"
-      }`
-    );
-    console.error("");
+    // Only show diagnostic information in verbose mode
+    if (isVerbose) {
+      console.error("=== SERVER ROOT DETECTION STRATEGIES ===");
+      console.error(`Environment: process.cwd() = ${process.cwd()}`);
+      console.error(`Environment: process.argv[0] = ${process.argv[0]}`);
+      console.error(
+        `Environment: process.argv[1] = ${process.argv[1] || "undefined"}`
+      );
+      console.error(
+        `Environment: __filename = ${fileURLToPath(import.meta.url)}`
+      );
+      console.error(
+        `Environment: MCP_SERVER_ROOT = ${
+          process.env.MCP_SERVER_ROOT || "undefined"
+        }`
+      );
+      console.error(`Strategies to test: ${strategies.length}`);
+      console.error("");
+    }
 
-    // Test each strategy to find the first working one
-    for (const strategy of strategies) {
+    // Test strategies with optimized flow
+    let lastHighPriorityIndex = -1;
+    for (let i = 0; i < strategies.length; i++) {
+      const strategy = strategies[i];
+
+      // Track where high-priority strategies end for early termination logic
+      if (strategy.priority === "high") {
+        lastHighPriorityIndex = i;
+      }
+
       try {
         const resolvedPath = path.resolve(strategy.path);
 
@@ -194,37 +228,77 @@ export class ApplicationOrchestrator {
         const fs = await import("fs/promises");
         await fs.access(configPath);
 
-        console.error(`✓ SUCCESS: ${strategy.name}`);
-        console.error(`  Path: ${resolvedPath}`);
-        console.error(`  Source: ${strategy.source}`);
-        console.error(`  Config found: ${configPath}`);
+        // Success! Only log if not in quiet mode
+        if (!isQuiet) {
+          console.error(`✓ SUCCESS: ${strategy.name}`);
+          console.error(`  Path: ${resolvedPath}`);
+          console.error(`  Source: ${strategy.source}`);
+          console.error(`  Config found: ${configPath}`);
+
+          // Show efficiency info in verbose mode
+          if (isVerbose) {
+            console.error(
+              `  Strategy #${i + 1}/${strategies.length} (${
+                strategy.priority
+              } priority)`
+            );
+            console.error(
+              `  Skipped ${strategies.length - i - 1} remaining strategies`
+            );
+          }
+        }
 
         return resolvedPath;
       } catch (error) {
-        console.error(`✗ FAILED: ${strategy.name}`);
-        console.error(`  Tried path: ${path.resolve(strategy.path)}`);
-        console.error(`  Source: ${strategy.source}`);
-        console.error(
-          `  Error: ${error instanceof Error ? error.message : String(error)}`
-        );
+        // Only log failures in verbose mode
+        if (isVerbose) {
+          console.error(`✗ FAILED: ${strategy.name}`);
+          console.error(`  Tried path: ${path.resolve(strategy.path)}`);
+          console.error(`  Source: ${strategy.source}`);
+          console.error(`  Priority: ${strategy.priority}`);
+          console.error(
+            `  Error: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+
+        // Early termination: If all high-priority strategies fail and we're not in verbose mode,
+        // provide a simplified error message encouraging environment variable usage
+        if (
+          i === lastHighPriorityIndex &&
+          !isVerbose &&
+          lastHighPriorityIndex >= 0
+        ) {
+          if (!isQuiet) {
+            console.error(
+              `⚠️  High-priority detection strategies failed. Trying fallback methods...`
+            );
+            console.error(
+              `💡 Tip: Set MCP_SERVER_ROOT environment variable for instant detection`
+            );
+            console.error(`📝 Use --verbose to see detailed strategy testing`);
+          }
+        }
       }
     }
 
-    // If all strategies fail, provide comprehensive troubleshooting information
+    // If all strategies fail, provide optimized troubleshooting information
     const attemptedPaths = strategies
-      .map((s) => `  - ${s.name}: ${path.resolve(s.path)}`)
+      .map(
+        (s, i) =>
+          `  ${i + 1}. ${s.name} (${s.priority}): ${path.resolve(s.path)}`
+      )
       .join("\n");
 
     const troubleshootingInfo = `
 TROUBLESHOOTING CLAUDE DESKTOP ISSUES:
 
-1. Environment Variable Override:
-   Set MCP_SERVER_ROOT environment variable to your server directory:
+🎯 RECOMMENDED SOLUTION (fastest):
+   Set MCP_SERVER_ROOT environment variable:
    Windows: set MCP_SERVER_ROOT=E:\\path\\to\\claude-prompts-mcp\\server
    macOS/Linux: export MCP_SERVER_ROOT=/path/to/claude-prompts-mcp/server
 
-2. Claude Desktop Configuration:
-   Ensure your claude_desktop_config.json uses absolute paths:
+📁 Claude Desktop Configuration:
+   Update your claude_desktop_config.json:
    {
      "mcpServers": {
        "claude-prompts-mcp": {
@@ -237,19 +311,26 @@ TROUBLESHOOTING CLAUDE DESKTOP ISSUES:
      }
    }
 
-3. Alternative: Create wrapper script that sets working directory before launching server.
+🔧 Alternative Solutions:
+   1. Create wrapper script that sets working directory before launching server
+   2. Use absolute paths in your Claude Desktop configuration
+   3. Run from the correct working directory (server/)
 
-Current working directory: ${process.cwd()}
-Attempted paths:\n${attemptedPaths}
+🐛 Debug Mode:
+   Use --verbose or --debug-startup flag to see detailed strategy testing
+
+📊 Detection Summary:
+   Current working directory: ${process.cwd()}
+   Strategies tested (in order of priority):
+${attemptedPaths}
 `;
 
     console.error(troubleshootingInfo);
 
     throw new Error(
-      `Unable to determine server root directory. See troubleshooting information above.\n\n` +
-        `The most common issue is Claude Desktop running the server from a different directory.\n` +
-        `Please set MCP_SERVER_ROOT environment variable to the server directory path.\n\n` +
-        troubleshootingInfo
+      `Unable to determine server root directory after testing ${strategies.length} strategies.\n\n` +
+        `QUICK FIX: Set MCP_SERVER_ROOT environment variable to your server directory path.\n\n` +
+        `See detailed troubleshooting information above.`
     );
   }
 
@@ -272,12 +353,27 @@ Attempted paths:\n${attemptedPaths}
       this.configManager
     );
 
-    // Initialize logger
+    // Check verbosity flags for conditional logging
+    const isVerbose =
+      args.includes("--verbose") || args.includes("--debug-startup");
+    const isQuiet = args.includes("--quiet");
+
+    // Initialize logger with verbosity awareness
     this.logger = createSimpleLogger(transport);
-    this.logger.info("Starting MCP Claude Prompts Server...");
-    this.logger.info(`Transport: ${transport}`);
-    this.logger.info(`Server root: ${serverRoot}`);
-    this.logger.info(`Config file: ${CONFIG_FILE}`);
+
+    // Only show startup messages if not in quiet mode
+    if (!isQuiet) {
+      this.logger.info("Starting MCP Claude Prompts Server...");
+      this.logger.info(`Transport: ${transport}`);
+    }
+
+    // Verbose mode shows detailed configuration info
+    if (isVerbose) {
+      this.logger.info(`Server root: ${serverRoot}`);
+      this.logger.info(`Config file: ${CONFIG_FILE}`);
+      this.logger.debug(`Command line args: ${JSON.stringify(args)}`);
+      this.logger.debug(`Process working directory: ${process.cwd()}`);
+    }
 
     // Initialize text reference manager
     this.textReferenceManager = new TextReferenceManager(this.logger);
@@ -296,13 +392,22 @@ Attempted paths:\n${attemptedPaths}
       },
     });
 
-    this.logger.info("Foundation modules initialized");
+    // Only log completion in verbose mode
+    if (isVerbose) {
+      this.logger.info("Foundation modules initialized");
+    }
   }
 
   /**
    * Phase 2: Load and process prompt data
    */
   private async loadAndProcessData(): Promise<void> {
+    // Check verbosity flags for conditional logging
+    const args = process.argv.slice(2);
+    const isVerbose =
+      args.includes("--verbose") || args.includes("--debug-startup");
+    const isQuiet = args.includes("--quiet");
+
     // Initialize prompt manager
     this.promptManager = new PromptManager(
       this.logger,
@@ -320,72 +425,82 @@ Attempted paths:\n${attemptedPaths}
 
     if (process.env.MCP_PROMPTS_CONFIG_PATH) {
       PROMPTS_FILE = process.env.MCP_PROMPTS_CONFIG_PATH;
-      this.logger.info(
-        "🎯 Using MCP_PROMPTS_CONFIG_PATH environment variable override"
-      );
+      if (isVerbose) {
+        this.logger.info(
+          "🎯 Using MCP_PROMPTS_CONFIG_PATH environment variable override"
+        );
+      }
     } else {
       // Fallback to ConfigManager's getPromptsFilePath() method
       PROMPTS_FILE = this.configManager.getPromptsFilePath();
-      this.logger.info("📁 Using config-based prompts file path resolution");
+      if (isVerbose) {
+        this.logger.info("📁 Using config-based prompts file path resolution");
+      }
     }
 
-    // Enhanced logging for prompt loading pipeline
-    this.logger.info("=== PROMPT LOADING PIPELINE START ===");
-    this.logger.info(`Config prompts.file setting: "${config.prompts.file}"`);
-    if (process.env.MCP_PROMPTS_CONFIG_PATH) {
+    // Enhanced logging for prompt loading pipeline (verbose mode only)
+    if (isVerbose) {
+      this.logger.info("=== PROMPT LOADING PIPELINE START ===");
+      this.logger.info(`Config prompts.file setting: "${config.prompts.file}"`);
+      if (process.env.MCP_PROMPTS_CONFIG_PATH) {
+        this.logger.info(
+          `🎯 MCP_PROMPTS_CONFIG_PATH override: "${process.env.MCP_PROMPTS_CONFIG_PATH}"`
+        );
+      } else {
+        this.logger.info(
+          `Config manager base directory: "${path.dirname(
+            this.configManager.getPromptsFilePath()
+          )}"`
+        );
+      }
+      this.logger.info(`✅ Final PROMPTS_FILE path: "${PROMPTS_FILE}"`);
+
+      // Add additional diagnostic information
+      this.logger.info("=== PATH RESOLUTION DIAGNOSTICS ===");
+      this.logger.info(`process.cwd(): ${process.cwd()}`);
+      this.logger.info(`process.argv[0]: ${process.argv[0]}`);
+      this.logger.info(`process.argv[1]: ${process.argv[1] || "undefined"}`);
       this.logger.info(
-        `🎯 MCP_PROMPTS_CONFIG_PATH override: "${process.env.MCP_PROMPTS_CONFIG_PATH}"`
+        `__filename equivalent: ${fileURLToPath(import.meta.url)}`
       );
-    } else {
       this.logger.info(
-        `Config manager base directory: "${path.dirname(
-          this.configManager.getPromptsFilePath()
-        )}"`
+        `Config file path: ${(this.configManager as any).configPath}`
+      );
+      this.logger.info(
+        `MCP_PROMPTS_CONFIG_PATH: ${
+          process.env.MCP_PROMPTS_CONFIG_PATH || "undefined"
+        }`
+      );
+      this.logger.info(
+        `MCP_SERVER_ROOT: ${process.env.MCP_SERVER_ROOT || "undefined"}`
+      );
+      this.logger.info(
+        `PROMPTS_FILE is absolute: ${path.isAbsolute(PROMPTS_FILE)}`
+      );
+      this.logger.info(
+        `PROMPTS_FILE normalized: ${path.normalize(PROMPTS_FILE)}`
       );
     }
-    this.logger.info(`✅ Final PROMPTS_FILE path: "${PROMPTS_FILE}"`);
-
-    // Add additional diagnostic information
-    this.logger.info("=== PATH RESOLUTION DIAGNOSTICS ===");
-    this.logger.info(`process.cwd(): ${process.cwd()}`);
-    this.logger.info(`process.argv[0]: ${process.argv[0]}`);
-    this.logger.info(`process.argv[1]: ${process.argv[1] || "undefined"}`);
-    this.logger.info(
-      `__filename equivalent: ${fileURLToPath(import.meta.url)}`
-    );
-    this.logger.info(
-      `Config file path: ${(this.configManager as any).configPath}`
-    );
-    this.logger.info(
-      `MCP_PROMPTS_CONFIG_PATH: ${
-        process.env.MCP_PROMPTS_CONFIG_PATH || "undefined"
-      }`
-    );
-    this.logger.info(
-      `MCP_SERVER_ROOT: ${process.env.MCP_SERVER_ROOT || "undefined"}`
-    );
-    this.logger.info(
-      `PROMPTS_FILE is absolute: ${path.isAbsolute(PROMPTS_FILE)}`
-    );
-    this.logger.info(
-      `PROMPTS_FILE normalized: ${path.normalize(PROMPTS_FILE)}`
-    );
 
     // Validate that we're using absolute paths (critical for Claude Desktop)
     if (!path.isAbsolute(PROMPTS_FILE)) {
-      this.logger.error(
-        `⚠️  CRITICAL: PROMPTS_FILE is not absolute: ${PROMPTS_FILE}`
-      );
-      this.logger.error(
-        `This will cause issues with Claude Desktop execution!`
-      );
+      if (isVerbose) {
+        this.logger.error(
+          `⚠️  CRITICAL: PROMPTS_FILE is not absolute: ${PROMPTS_FILE}`
+        );
+        this.logger.error(
+          `This will cause issues with Claude Desktop execution!`
+        );
+      }
       // Convert to absolute path as fallback
       // Use serverRoot which is determined earlier and more reliable for constructing the absolute path
       const serverRoot = await this.determineServerRoot(); // Ensure serverRoot is available
       const absolutePromptsFile = path.resolve(serverRoot, PROMPTS_FILE);
-      this.logger.info(
-        `🔧 Converting to absolute path: ${absolutePromptsFile}`
-      );
+      if (isVerbose) {
+        this.logger.info(
+          `🔧 Converting to absolute path: ${absolutePromptsFile}`
+        );
+      }
       PROMPTS_FILE = absolutePromptsFile;
     }
 
@@ -393,87 +508,26 @@ Attempted paths:\n${attemptedPaths}
     try {
       const fs = await import("fs/promises");
       await fs.access(PROMPTS_FILE);
-      this.logger.info(`✓ Prompts configuration file exists: ${PROMPTS_FILE}`);
+      if (isVerbose) {
+        this.logger.info(
+          `✓ Prompts configuration file exists: ${PROMPTS_FILE}`
+        );
+      }
     } catch (error) {
       this.logger.error(
         `✗ Prompts configuration file NOT FOUND: ${PROMPTS_FILE}`
       );
-      this.logger.error(`File access error:`, error);
+      if (isVerbose) {
+        this.logger.error(`File access error:`, error);
 
-      // Provide additional troubleshooting information
-      this.logger.error("=== TROUBLESHOOTING INFORMATION ===");
-      this.logger.error(`Is path absolute? ${path.isAbsolute(PROMPTS_FILE)}`);
-      this.logger.error(`Normalized path: ${path.normalize(PROMPTS_FILE)}`);
-      this.logger.error(`Path exists check: ${PROMPTS_FILE}`);
-
-      // Try to list the directory contents for debugging
-      try {
-        const fs = await import("fs/promises");
-        const dir = path.dirname(PROMPTS_FILE);
-        const files = await fs.readdir(dir);
-        this.logger.error(`Directory contents of ${dir}:`);
-        files.forEach((file: string) => this.logger.error(`  - ${file}`));
-      } catch (dirError) {
-        this.logger.error(
-          `Cannot read directory ${path.dirname(PROMPTS_FILE)}: ${dirError}`
-        );
+        // Provide additional troubleshooting information
+        this.logger.error("=== TROUBLESHOOTING INFORMATION ===");
+        this.logger.error(`Is path absolute? ${path.isAbsolute(PROMPTS_FILE)}`);
+        this.logger.error(`Normalized path: ${path.normalize(PROMPTS_FILE)}`);
+        this.logger.error(`Path exists check: ${PROMPTS_FILE}`);
       }
 
-      // Provide specific troubleshooting for Claude Desktop with new environment variable
-      this.logger.error("=== CLAUDE DESKTOP TROUBLESHOOTING ===");
-      this.logger.error("If you're using Claude Desktop, try these solutions:");
-      this.logger.error("");
-      this.logger.error(
-        "🎯 OPTION 1: Direct prompts config path (RECOMMENDED):"
-      );
-      this.logger.error("   {");
-      this.logger.error('     "mcpServers": {');
-      this.logger.error('       "claude-prompts-mcp": {');
-      this.logger.error('         "command": "node",');
-      this.logger.error(
-        '         "args": ["E:\\\\full\\\\path\\\\to\\\\server\\\\dist\\\\index.js", "--transport=stdio"],'
-      );
-      this.logger.error('         "env": {');
-      this.logger.error(
-        '           "MCP_PROMPTS_CONFIG_PATH": "E:\\\\full\\\\path\\\\to\\\\promptsConfig.json"'
-      );
-      this.logger.error("         }");
-      this.logger.error("       }");
-      this.logger.error("     }");
-      this.logger.error("   }");
-      this.logger.error("");
-      this.logger.error("📁 OPTION 2: Server root override:");
-      this.logger.error("   {");
-      this.logger.error('     "mcpServers": {');
-      this.logger.error('       "claude-prompts-mcp": {');
-      this.logger.error('         "command": "node",');
-      this.logger.error(
-        '         "args": ["E:\\\\full\\\\path\\\\to\\\\server\\\\dist\\\\index.js", "--transport=stdio"],'
-      );
-      this.logger.error('         "env": {');
-      this.logger.error(
-        '           "MCP_SERVER_ROOT": "E:\\\\full\\\\path\\\\to\\\\server"'
-      );
-      this.logger.error("         }");
-      this.logger.error("       }");
-      this.logger.error("     }");
-      this.logger.error("   }");
-      this.logger.error("");
-      this.logger.error("💡 OPTION 3: Set environment variable globally:");
-      this.logger.error(
-        `   set MCP_PROMPTS_CONFIG_PATH=E:\\\\full\\\\path\\\\to\\\\promptsConfig.json`
-      );
-      this.logger.error("");
-      this.logger.error(
-        "🔧 OPTION 4: Create a wrapper script that sets the working directory"
-      );
-      this.logger.error("");
-
-      throw new Error(
-        `Prompts configuration file not found: ${PROMPTS_FILE}\n\n` +
-          `💡 QUICK FIX: Set MCP_PROMPTS_CONFIG_PATH environment variable to the full path of your promptsConfig.json file.\n\n` +
-          `See troubleshooting information above for Claude Desktop configuration.`
-      );
+      throw new Error(`Prompts configuration file not found: ${PROMPTS_FILE}`);
     }
 
     try {

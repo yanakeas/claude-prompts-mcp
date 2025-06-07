@@ -288,10 +288,111 @@ async function gracefulShutdown(exitCode: number = 0): Promise<void> {
 }
 
 /**
+ * Display help information
+ */
+function showHelp(): void {
+  console.log(`
+MCP Claude Prompts Server v2.0 - Optimized Startup
+
+USAGE:
+  node dist/index.js [OPTIONS]
+
+OPTIONS:
+  --transport=TYPE     Transport type: stdio (default) or sse
+  --quiet             Minimal output mode (production-friendly)
+  --verbose           Detailed diagnostics and strategy information
+  --debug-startup     Alias for --verbose with extra debugging
+  --help              Show this help message
+
+ENVIRONMENT VARIABLES:
+  MCP_SERVER_ROOT              Override server root directory detection (recommended)
+  MCP_PROMPTS_CONFIG_PATH      Direct path to prompts configuration file
+
+OPTIMIZED STARTUP MODES:
+  Production:    node dist/index.js --quiet --transport=stdio
+  Development:   node dist/index.js --verbose --transport=sse
+  Debugging:     node dist/index.js --debug-startup
+  Silent:        node dist/index.js --quiet
+
+EXAMPLES:
+  # Standard usage
+  node dist/index.js
+
+  # Claude Desktop (recommended configuration)
+  node dist/index.js --transport=stdio --quiet
+
+  # Development with detailed logging
+  node dist/index.js --verbose --transport=sse
+
+  # With environment override (fastest startup)
+  MCP_SERVER_ROOT=/path/to/server node dist/index.js --quiet
+
+PERFORMANCE FEATURES:
+  ✓ Optimized strategy ordering (fastest detection first)
+  ✓ Early termination on first success
+  ✓ Environment variable bypass for instant detection
+  ✓ Conditional logging based on verbosity level
+  ✓ Intelligent fallback with user guidance
+
+TROUBLESHOOTING:
+  Use --verbose to see detailed server root detection strategies
+  Set MCP_SERVER_ROOT environment variable for instant path detection
+  Use --quiet in production for clean startup logs
+
+For more information, visit: https://github.com/minipuft/claude-prompts-mcp
+`);
+}
+
+/**
+ * Parse and validate command line arguments
+ */
+function parseCommandLineArgs(): { shouldExit: boolean; exitCode: number } {
+  const args = process.argv.slice(2);
+
+  // Check for help flag
+  if (args.includes("--help") || args.includes("-h")) {
+    showHelp();
+    return { shouldExit: true, exitCode: 0 };
+  }
+
+  // Validate transport argument
+  const transportArg = args.find((arg) => arg.startsWith("--transport="));
+  if (transportArg) {
+    const transport = transportArg.split("=")[1];
+    if (!["stdio", "sse"].includes(transport)) {
+      console.error(
+        `Error: Invalid transport '${transport}'. Supported: stdio, sse`
+      );
+      console.error("Use --help for usage information");
+      return { shouldExit: true, exitCode: 1 };
+    }
+  }
+
+  // Validate that conflicting flags aren't used together
+  const isQuiet = args.includes("--quiet");
+  const isVerbose =
+    args.includes("--verbose") || args.includes("--debug-startup");
+
+  if (isQuiet && isVerbose) {
+    console.error("Error: Cannot use --quiet and --verbose flags together");
+    console.error("Use --help for usage information");
+    return { shouldExit: true, exitCode: 1 };
+  }
+
+  return { shouldExit: false, exitCode: 0 };
+}
+
+/**
  * Main application entry point with comprehensive error handling and validation
  */
 async function main(): Promise<void> {
   try {
+    // Parse and validate command line arguments
+    const { shouldExit, exitCode } = parseCommandLineArgs();
+    if (shouldExit) {
+      process.exit(exitCode);
+    }
+
     // Setup error handlers first
     setupErrorHandlers();
 

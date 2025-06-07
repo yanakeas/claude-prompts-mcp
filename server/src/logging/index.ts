@@ -177,28 +177,35 @@ export function createLogger(config: LoggingConfig): EnhancedLogger {
 
 /**
  * Create a simple logger for areas that don't need the full enhanced logger
+ * Now supports verbosity control via command-line flags
  */
 export function createSimpleLogger(transport: string = "sse"): Logger {
   const enableConsole = transport !== TransportType.STDIO;
 
+  // Check command-line flags for verbosity control
+  const args = process.argv.slice(2);
+  const isVerbose =
+    args.includes("--verbose") || args.includes("--debug-startup");
+  const isQuiet = args.includes("--quiet");
+
   return {
     info: (message: string, ...args: any[]) => {
-      if (enableConsole) {
+      if (enableConsole && !isQuiet) {
         console.log(`[INFO] ${message}`, ...args);
       }
     },
     error: (message: string, ...args: any[]) => {
-      if (enableConsole) {
+      if (enableConsole && !isQuiet) {
         console.error(`[ERROR] ${message}`, ...args);
       }
     },
     warn: (message: string, ...args: any[]) => {
-      if (enableConsole) {
+      if (enableConsole && !isQuiet) {
         console.warn(`[WARN] ${message}`, ...args);
       }
     },
     debug: (message: string, ...args: any[]) => {
-      if (enableConsole && process.env.DEBUG) {
+      if (enableConsole && isVerbose) {
         console.log(`[DEBUG] ${message}`, ...args);
       }
     },
