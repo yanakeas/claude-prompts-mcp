@@ -112,6 +112,7 @@ export async function modifyPromptSection(
   filePath?: string;
 }> {
   try {
+    const messages: string[] = [];
     // Read the promptsConfig.json file
     const configFilePath = path.resolve(configPath);
     const configContent = await fs.readFile(configFilePath, "utf8");
@@ -158,6 +159,11 @@ export async function modifyPromptSection(
             categoryFilePath = fullImportPath;
             promptIndex = foundIndex;
             promptsFile = categoryPromptsFile;
+            messages.push(
+              `✅ Found prompt '${promptId}' in category file: ${path.basename(
+                categoryFilePath
+              )}`
+            );
             break;
           }
         }
@@ -266,9 +272,18 @@ export async function modifyPromptSection(
     // Perform the operations as a transaction
     await performTransactionalFileOperations(operations, rollbacks);
 
+    messages.push(
+      `✅ Updated section '${sectionName}' in markdown file: ${prompt.file}`
+    );
+    if (sectionName === "title") {
+      messages.push(
+        `✅ Updated prompt name in category file to '${newContent}'`
+      );
+    }
+
     return {
       success: true,
-      message: `Successfully modified section '${sectionName}' in prompt '${promptId}'`,
+      message: messages.join("\n"),
       promptData: updatedPrompt,
       filePath: promptFilePath,
     };

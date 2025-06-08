@@ -70,65 +70,6 @@
       ]
     },
     {
-      "id": "content_analysis_chain",
-      "name": "Content Analysis Chain",
-      "category": "analysis",
-      "description": "A comprehensive analysis chain that processes content through multiple stages: initial content analysis, deep analysis, conversion to a structured markdown notebook, and final refinement.",
-      "file": "content_analysis_chain.md",
-      "arguments": [
-        {
-          "name": "content",
-          "description": "The content to be processed through the analysis chain",
-          "required": false
-        }
-      ],
-      "isChain": true,
-      "chainSteps": [
-        {
-          "promptId": "content_analysis",
-          "stepName": "Initial Content Analysis (Step 1 of 4)",
-          "inputMapping": {
-            "content": "content"
-          },
-          "outputMapping": {
-            "analysis_output": "step_0_output"
-          }
-        },
-        {
-          "promptId": "deep_analysis",
-          "stepName": "Deep Analysis (Step 2 of 4)",
-          "inputMapping": {
-            "content": "content",
-            "initial_analysis": "analysis_output"
-          },
-          "outputMapping": {
-            "deep_analysis_output": "step_1_output"
-          }
-        },
-        {
-          "promptId": "markdown_notebook",
-          "stepName": "Markdown Notebook Creation (Step 3 of 4)",
-          "inputMapping": {
-            "topic": "content",
-            "analysis": "deep_analysis_output"
-          },
-          "outputMapping": {
-            "notebook_output": "step_2_output"
-          }
-        },
-        {
-          "promptId": "note_refinement",
-          "stepName": "Note Refinement (Step 4 of 4)",
-          "inputMapping": {
-            "notes": "notebook_output"
-          },
-          "outputMapping": {
-            "refined_notes": "step_3_output"
-          }
-        }
-      ]
-    },
-    {
       "id": "query_refinement",
       "name": "Query Refinement",
       "category": "analysis",
@@ -157,6 +98,20 @@
         {
           "name": "depth",
           "description": "The depth of analysis (basic, detailed, or comprehensive)",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "notes",
+      "name": "Notes",
+      "category": "analysis",
+      "description": "A comprehensive analysis chain that processes content through multiple stages: initial content analysis, deep analysis, conversion to a structured markdown notebook, and final refinement.",
+      "file": "notes.md",
+      "arguments": [
+        {
+          "name": "content",
+          "description": "The content to be processed through the analysis chain",
           "required": false
         }
       ]

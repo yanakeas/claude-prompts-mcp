@@ -25,24 +25,21 @@ export class PromptManagementTools {
   private configManager: ConfigManager;
   private promptsData: PromptData[] = [];
   private convertedPrompts: ConvertedPrompt[] = [];
-  private fullServerRefresh: () => Promise<void>;
-  private triggerServerRefresh: (
-    restart?: boolean,
-    reason?: string
-  ) => Promise<void>;
+  private onRefresh: () => Promise<void>;
+  private onRestart: (reason: string) => Promise<void>;
 
   constructor(
     logger: Logger,
     mcpServer: any,
     configManager: ConfigManager,
-    fullServerRefresh: () => Promise<void>,
-    triggerServerRefresh: (restart?: boolean, reason?: string) => Promise<void>
+    onRefresh: () => Promise<void>,
+    onRestart: (reason: string) => Promise<void>
   ) {
     this.logger = logger;
     this.mcpServer = mcpServer;
     this.configManager = configManager;
-    this.fullServerRefresh = fullServerRefresh;
-    this.triggerServerRefresh = triggerServerRefresh;
+    this.onRefresh = onRefresh;
+    this.onRestart = onRestart;
   }
 
   /**
@@ -155,19 +152,10 @@ export class PromptManagementTools {
           const result = await this.updatePromptImplementation(args);
 
           if (args.fullServerRestart) {
-            setTimeout(async () => {
-              try {
-                await this.triggerServerRefresh(
-                  true,
-                  `Prompt updated: ${args.id}`
-                );
-              } catch (error) {
-                this.logger.error(
-                  `Error during server restart after updating prompt: ${args.id}`,
-                  error
-                );
-              }
-            }, 1000);
+            setTimeout(
+              () => this.onRestart(`Prompt updated: ${args.id}`),
+              1000
+            );
             return {
               content: [
                 {
@@ -177,27 +165,16 @@ export class PromptManagementTools {
               ],
             };
           } else {
-            // Default to hot-reload if not a full server restart
-            try {
-              await this.triggerServerRefresh(
-                false,
-                `Prompt updated: ${args.id}`
-              );
-              this.logger.info(
-                `Hot-reload after updating prompt: ${args.id} completed.`
-              );
-            } catch (refreshError) {
-              this.logger.error(
-                `Error during hot-reload after updating prompt: ${args.id}`,
-                refreshError
-              );
-              // Potentially append to result.message or return a specific error message
-            }
+            // Default to hot-reload
+            await this.onRefresh();
+            this.logger.info(
+              `Hot-reload after updating prompt: ${args.id} completed.`
+            );
             return {
               content: [
                 {
                   type: "text" as const,
-                  text: `${result.message} Changes were hot-reloaded. Server was not restarted.`,
+                  text: `${result.message} Changes were hot-reloaded.`,
                 },
               ],
             };
@@ -227,35 +204,49 @@ export class PromptManagementTools {
     args: any
   ): Promise<{ message: string }> {
     const PROMPTS_FILE = this.configManager.getPromptsFilePath();
+    const messages: string[] = [];
+
     const fileContent = await readFile(PROMPTS_FILE, "utf8");
     const promptsConfig = JSON.parse(fileContent) as PromptsConfigFile;
 
-    // Ensure required arrays exist
-    if (!promptsConfig.categories) {
-      promptsConfig.categories = [];
-    }
-    if (!promptsConfig.imports) {
-      promptsConfig.imports = [];
+    if (!promptsConfig.categories) promptsConfig.categories = [];
+    if (!promptsConfig.imports) promptsConfig.imports = [];
+
+    const { effectiveCategory, created: categoryCreated } =
+      await this.ensureCategoryExists(
+        args.category,
+        promptsConfig,
+        PROMPTS_FILE
+      );
+
+    if (categoryCreated) {
+      messages.push(
+        `✅ Created and configured new category: '${effectiveCategory}'`
+      );
+    } else {
+      messages.push(`ℹ️ Using existing category: '${effectiveCategory}'`);
     }
 
-    // Handle category creation if needed
-    const effectiveCategory = await this.ensureCategoryExists(
-      args.category,
-      promptsConfig,
-      PROMPTS_FILE
+    const { exists: promptExists, filePath } =
+      await this.createOrUpdatePromptFile(
+        args,
+        effectiveCategory,
+        PROMPTS_FILE
+      );
+
+    messages.push(
+      `✅ ${
+        promptExists ? "Updated" : "Created"
+      } prompt markdown file: ${path.basename(filePath)}`
     );
-
-    // Create prompt file and update category
-    const promptExists = await this.createOrUpdatePromptFile(
-      args,
-      effectiveCategory,
-      PROMPTS_FILE
+    messages.push(
+      `✅ ${promptExists ? "Updated" : "Added"} prompt entry for '${
+        args.id
+      }' in category's prompts.json.`
     );
 
     return {
-      message: `Successfully ${promptExists ? "updated" : "created"} prompt: ${
-        args.id
-      }`,
+      message: messages.join("\n"),
     };
   }
 
@@ -266,7 +257,7 @@ export class PromptManagementTools {
     category: string,
     promptsConfig: PromptsConfigFile,
     promptsFile: string
-  ): Promise<string> {
+  ): Promise<{ effectiveCategory: string; created: boolean }> {
     const effectiveCategory = category.toLowerCase().replace(/\s+/g, "-");
     const categoryExists = promptsConfig.categories.some(
       (cat) => cat.id === effectiveCategory
@@ -314,9 +305,10 @@ export class PromptManagementTools {
         JSON.stringify(promptsConfig, null, 2),
         "utf8"
       );
+      return { effectiveCategory, created: true };
     }
 
-    return effectiveCategory;
+    return { effectiveCategory, created: false };
   }
 
   /**
@@ -326,7 +318,7 @@ export class PromptManagementTools {
     args: any,
     effectiveCategory: string,
     promptsFile: string
-  ): Promise<boolean> {
+  ): Promise<{ exists: boolean; filePath: string }> {
     const promptFilename = `${args.id}.md`;
     const promptDirPath = path.join(
       path.dirname(promptsFile),
@@ -414,7 +406,7 @@ export class PromptManagementTools {
       "utf8"
     );
 
-    return promptExists;
+    return { exists: promptExists, filePath: fullPromptFilePath };
   }
 
   /**
@@ -442,49 +434,25 @@ export class PromptManagementTools {
           const result = await this.deletePromptImplementation(id);
 
           if (fullServerRestart) {
-            setTimeout(async () => {
-              try {
-                await this.triggerServerRefresh(true, `Prompt deleted: ${id}`);
-              } catch (err) {
-                this.logger.error(
-                  `Error during server restart after deleting prompt: ${id}`,
-                  err
-                );
-              }
-            }, 1000);
+            setTimeout(() => this.onRestart(`Prompt deleted: ${id}`), 1000);
             return {
               content: [
                 {
-                  type: "text" as const,
-                  text: `${result.message}\n\nFull server restart initiated as requested...`,
+                  type: "text",
+                  text: `${result.message} Server restarting...`,
                 },
               ],
             };
           } else {
-            // Default to hot-reload if not a full server restart
-            try {
-              await this.triggerServerRefresh(false, `Prompt deleted: ${id}`);
-              this.logger.info(
-                `Hot-reload after deleting prompt: ${id} completed.`
-              );
-            } catch (refreshError) {
-              this.logger.error(
-                `Error during hot-reload after deleting prompt: ${id}`,
-                refreshError
-              );
-              // Potentially append to result.message or return a specific error message
-            }
+            await this.onRefresh();
             return {
               content: [
-                {
-                  type: "text" as const,
-                  text: `${result.message} Changes were hot-reloaded. Server was not restarted.`,
-                },
+                { type: "text", text: `${result.message} Hot-reloaded.` },
               ],
             };
           }
         } catch (error) {
-          this.logger.error("Error in delete_prompt tool:", error);
+          this.logger.error(`Error in delete_prompt tool:`, error);
           return {
             content: [
               {
@@ -510,6 +478,7 @@ export class PromptManagementTools {
     const PROMPTS_CONFIG_FILE_PATH = this.configManager.getPromptsFilePath();
     const promptsConfigDir = path.dirname(PROMPTS_CONFIG_FILE_PATH);
     let promptsConfig: PromptsConfigFile;
+    const messages: string[] = [];
 
     try {
       const configContent = await readFile(PROMPTS_CONFIG_FILE_PATH, "utf8");
@@ -530,7 +499,6 @@ export class PromptManagementTools {
     let promptMarkdownFilePath: string | null = null;
 
     for (const categoryImport of [...promptsConfig.imports]) {
-      // Iterate over a copy for safe modification
       const fullCategoryPromptsPath = path.join(
         promptsConfigDir,
         categoryImport
@@ -549,7 +517,7 @@ export class PromptManagementTools {
           `Could not read or parse category prompts file: ${fullCategoryPromptsPath}`,
           e
         );
-        continue; // Skip to next import
+        continue;
       }
 
       if (
@@ -562,7 +530,6 @@ export class PromptManagementTools {
         continue;
       }
 
-      const originalPromptsCount = categoryPromptsJson.prompts.length;
       const promptToDeleteIndex = categoryPromptsJson.prompts.findIndex(
         (p: PromptData) => p.id === id
       );
@@ -580,34 +547,29 @@ export class PromptManagementTools {
           JSON.stringify(categoryPromptsJson, null, 2),
           "utf8"
         );
-        this.logger.info(
-          `Removed prompt '${id}' from category file: ${fullCategoryPromptsPath}`
+        messages.push(
+          `✅ Removed prompt '${id}' from category file: ${categoryImport}`
         );
         promptFoundAndDeleted = true;
-        modifiedCategoryImportPath = categoryImport; // Store which import was modified
+        modifiedCategoryImportPath = categoryImport;
 
-        // Attempt to delete the markdown file
         if (promptMarkdownFilePath) {
           try {
             await fs.unlink(promptMarkdownFilePath);
-            this.logger.info(
-              `Deleted markdown file: ${promptMarkdownFilePath}`
-            );
+            messages.push(`✅ Deleted markdown file: ${promptEntry.file}`);
           } catch (unlinkError: any) {
-            // Log if it's not a "not found" error, as it might have been deleted already or never existed
             if (unlinkError.code !== "ENOENT") {
-              this.logger.warn(
-                `Could not delete markdown file '${promptMarkdownFilePath}':`,
-                unlinkError
+              messages.push(
+                `⚠️ Could not delete markdown file '${promptEntry.file}': ${unlinkError.message}`
               );
             } else {
-              this.logger.info(
-                `Markdown file '${promptMarkdownFilePath}' not found, possibly already deleted.`
+              messages.push(
+                `ℹ️ Markdown file '${promptEntry.file}' not found, possibly already deleted.`
               );
             }
           }
         }
-        break; // Exit loop once prompt is found and processed
+        break;
       }
     }
 
@@ -617,7 +579,6 @@ export class PromptManagementTools {
       );
     }
 
-    // If a category was modified, check if it's now empty and clean up promptsConfig.json
     if (modifiedCategoryImportPath) {
       const fullModifiedCategoryPath = path.join(
         promptsConfigDir,
@@ -634,61 +595,53 @@ export class PromptManagementTools {
           categoryPromptsConfig.prompts &&
           categoryPromptsConfig.prompts.length === 0
         ) {
-          this.logger.info(
-            `Category file '${modifiedCategoryImportPath}' is now empty. Removing from promptsConfig.json.`
+          messages.push(
+            `ℹ️ Category file '${modifiedCategoryImportPath}' is now empty.`
           );
           promptsConfig.imports = promptsConfig.imports.filter(
             (impPath) => impPath !== modifiedCategoryImportPath
           );
+          messages.push(
+            `✅ Removed empty category import from promptsConfig.json.`
+          );
 
           const categoryIdMatch = modifiedCategoryImportPath.match(
-            // Adjusted regex to be more flexible with path separators and prompts folder name
             /(?:prompts[\\/])?([^\\/]+)[\\/]prompts\.json$/
           );
           if (categoryIdMatch && categoryIdMatch[1]) {
             const categoryIdToRemove = categoryIdMatch[1];
-            this.logger.info(
-              `Also removing category definition for '${categoryIdToRemove}' from promptsConfig.json.`
-            );
+            const originalCategoryCount = promptsConfig.categories.length;
             promptsConfig.categories = promptsConfig.categories.filter(
               (cat) => cat.id !== categoryIdToRemove
             );
+            if (promptsConfig.categories.length < originalCategoryCount) {
+              messages.push(
+                `✅ Removed category definition for '${categoryIdToRemove}' from promptsConfig.json.`
+              );
+            }
 
-            // Optionally delete the empty category directory and its prompts.json file
             const categoryDirPath = path.dirname(fullModifiedCategoryPath);
             try {
-              // Check if directory is empty before removing (safer)
               const filesInDir = await fs.readdir(categoryDirPath);
-              if (
-                filesInDir.length === 0 ||
-                (filesInDir.length === 1 &&
-                  filesInDir[0] === "prompts.json" &&
-                  categoryPromptsConfig.prompts.length === 0)
-              ) {
+              if (filesInDir.length === 1 && filesInDir[0] === "prompts.json") {
                 await fs.rm(categoryDirPath, { recursive: true, force: true });
-                this.logger.info(
-                  `Deleted empty category directory: ${categoryDirPath}`
-                );
-              } else if (
-                filesInDir.length === 1 &&
-                filesInDir[0] === "prompts.json" &&
-                categoryPromptsConfig.prompts.length > 0
-              ) {
-                // This case should not happen if we just emptied it.
-                this.logger.warn(
-                  `Category directory ${categoryDirPath} still contains prompts.json with prompts. Not deleting directory.`
+                messages.push(
+                  `✅ Deleted empty category directory: ${path.basename(
+                    categoryDirPath
+                  )}`
                 );
               } else {
-                this.logger.info(
-                  `Category directory ${categoryDirPath} not empty (contains: ${filesInDir.join(
-                    ", "
-                  )}). Not deleting.`
+                messages.push(
+                  `ℹ️ Category directory '${path.basename(
+                    categoryDirPath
+                  )}' was not empty, so it was not deleted.`
                 );
               }
-            } catch (dirRemoveError) {
-              this.logger.warn(
-                `Could not delete or check category directory ${categoryDirPath}:`,
-                dirRemoveError
+            } catch (dirRemoveError: any) {
+              messages.push(
+                `⚠️ Could not check or delete category directory '${path.basename(
+                  categoryDirPath
+                )}': ${dirRemoveError.message}`
               );
             }
           } else {
@@ -713,7 +666,7 @@ export class PromptManagementTools {
       }
     }
     return {
-      message: `Prompt '${id}' processed. If found, it has been deleted.`,
+      message: messages.join("\n"),
     };
   }
 
@@ -759,45 +712,33 @@ export class PromptManagementTools {
             PROMPTS_FILE
           );
 
-          if (!result.success) {
-            return {
-              content: [{ type: "text" as const, text: result.message }],
-              isError: true,
-            };
-          }
-
-          // Trigger server refresh: hot-reload if fullServerRestart is false/undefined, full restart if true.
-          try {
-            await this.triggerServerRefresh(
-              args.fullServerRestart || false,
-              `Section modified: ${args.section_name} in prompt: ${args.id}`
-            );
-          } catch (refreshError) {
-            this.logger.error(
-              `Error refreshing server after modifying section: ${args.section_name}`,
-              refreshError
-            );
-          }
-
           if (args.fullServerRestart) {
+            setTimeout(
+              () =>
+                this.onRestart(
+                  `Section '${args.section_name}' modified in prompt '${args.id}'`
+                ),
+              1000
+            );
             return {
               content: [
                 {
-                  type: "text" as const,
-                  text: `${result.message}\n\nFull server restart initiated as requested...`,
+                  type: "text",
+                  text: `${result.message}\n\nFull server restart initiated...`,
+                },
+              ],
+            };
+          } else {
+            await this.onRefresh();
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `${result.message}\n\nChanges were hot-reloaded.`,
                 },
               ],
             };
           }
-
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: `${result.message} Changes were hot-reloaded. Server was not restarted.`,
-              },
-            ],
-          };
         } catch (error) {
           this.logger.error(`Error in modify_prompt_section:`, error);
           return {
@@ -841,76 +782,34 @@ export class PromptManagementTools {
         }: { fullServerRestart?: boolean; reason?: string },
         extra: any
       ) => {
+        const reloadReason = reason || "Manual reload requested";
+        this.logger.info(
+          `Reload prompts request received${
+            fullServerRestart ? " with restart" : ""
+          }: ${reloadReason}`
+        );
+
         try {
-          const reloadReason = reason || "Manual reload requested";
-          this.logger.info(
-            `Reload prompts request received${
-              fullServerRestart
-                ? " (full server restart requested)"
-                : " (hot-reload only)"
-            }: ${reloadReason}`
-          );
-
           if (fullServerRestart) {
-            // If restarting, the triggerServerRefresh(true, ...) will handle everything,
-            // including data reload as part of the orchestrator's restart sequence.
-            this.logger.info(
-              `Initiating full server restart. Reason: ${reloadReason}`
-            );
-            // Schedule restart after response.
-            setTimeout(async () => {
-              try {
-                await this.triggerServerRefresh(true, reloadReason);
-              } catch (error) {
-                this.logger.error("Error handling server restart:", error);
-              }
-            }, 1000); // Delay to allow the current response to be sent
-
+            setTimeout(() => this.onRestart(reloadReason), 1000);
             return {
               content: [
                 {
                   type: "text" as const,
-                  text: `Server is restarting. Prompts and configuration will be reloaded. Reason: ${reloadReason}\n\nThe server will be back online in a few seconds. You may need to refresh your client.`,
+                  text: `Server is restarting. Reason: ${reloadReason}`,
                 },
               ],
             };
           } else {
-            // If NOT performing a full server restart, just perform the hot-reload.
-            this.logger.info(
-              `Performing hot-reload of prompts. Reason: ${reloadReason}`
-            );
-            try {
-              await this.fullServerRefresh(); // This calls orchestrator.loadAndProcessData()
-              this.logger.info(
-                `Completed hot-reload of prompts. Successfully reloaded ${this.promptsData.length} prompts from ${this.convertedPrompts.length} categories.`
-              );
-              return {
-                content: [
-                  {
-                    type: "text" as const,
-                    text: `Successfully hot-reloaded ${this.promptsData.length} prompts from ${this.convertedPrompts.length} categories. Server was not restarted.`,
-                  },
-                ],
-              };
-            } catch (refreshError) {
-              this.logger.error(
-                "Error during hot-reload of prompts:",
-                refreshError
-              );
-              return {
-                content: [
-                  {
-                    type: "text" as const,
-                    text: `Error during hot-reload of prompts: ${
-                      refreshError instanceof Error
-                        ? refreshError.message
-                        : String(refreshError)
-                    }`,
-                  },
-                ],
-                isError: true,
-              };
-            }
+            await this.onRefresh();
+            return {
+              content: [
+                {
+                  type: "text" as const,
+                  text: "Successfully hot-reloaded all prompts.",
+                },
+              ],
+            };
           }
         } catch (error) {
           this.logger.error("Error in reload_prompts tool:", error);
@@ -918,7 +817,7 @@ export class PromptManagementTools {
             content: [
               {
                 type: "text" as const,
-                text: `Failed to process reload_prompts request: ${
+                text: `Failed to reload prompts: ${
                   error instanceof Error ? error.message : String(error)
                 }`,
               },

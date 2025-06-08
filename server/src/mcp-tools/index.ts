@@ -39,8 +39,8 @@ export class McpToolsManager {
     mcpServer: any,
     promptManager: PromptManager,
     configManager: ConfigManager,
-    fullServerRefresh: () => Promise<void>,
-    triggerServerRefresh: (restart?: boolean, reason?: string) => Promise<void>
+    onRefresh: () => Promise<void>,
+    onRestart: (reason: string) => Promise<void>
   ) {
     this.logger = logger;
     this.mcpServer = mcpServer;
@@ -50,8 +50,8 @@ export class McpToolsManager {
       logger,
       mcpServer,
       configManager,
-      fullServerRefresh,
-      triggerServerRefresh
+      onRefresh,
+      onRestart
     );
   }
 
@@ -474,15 +474,15 @@ export function createMcpToolsManager(
   mcpServer: any,
   promptManager: PromptManager,
   configManager: ConfigManager,
-  fullServerRefresh: () => Promise<void>,
-  triggerServerRefresh: (restart?: boolean, reason?: string) => Promise<void>
+  onRefresh: () => Promise<void>,
+  onRestart: (reason: string) => Promise<void>
 ): McpToolsManager {
   return new McpToolsManager(
     logger,
     mcpServer,
     promptManager,
     configManager,
-    fullServerRefresh,
-    triggerServerRefresh
+    onRefresh,
+    onRestart
   );
 }

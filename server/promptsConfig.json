@@ -54,6 +54,16 @@
       "id": "examples",
       "name": "Examples",
       "description": "Example prompts demonstrating various features and techniques, including Nunjucks."
+    },
+    {
+      "id": "creative-tools",
+      "name": "Creative Tools",
+      "description": "Prompts related to Creative Tools"
+    },
+    {
+      "id": "creative",
+      "name": "Creative",
+      "description": "Prompts related to Creative"
     }
   ],
   "prompts": [],
@@ -65,6 +75,8 @@
     "prompts/research/prompts.json",
     "prompts/research-tools/prompts.json",
     "prompts/documentation/prompts.json",
-    "prompts/examples/prompts.json"
+    "prompts/examples/prompts.json",
+    "prompts/creative-tools/prompts.json",
+    "prompts/creative/prompts.json"
   ]
 }

@@ -25,7 +25,6 @@ import {
   ConversationManager,
   createConversationManager,
 } from "./conversation-manager.js";
-import { createLegacyAdapter, LegacyAdapter } from "./legacy-adapter.js";
 import { createPromptExecutor, PromptExecutor } from "./prompt-executor.js";
 
 // Import types
@@ -43,7 +42,6 @@ export class ApplicationOrchestrator {
   private promptManager: PromptManager;
   private promptExecutor: PromptExecutor;
   private mcpToolsManager: McpToolsManager;
-  private legacyAdapter: LegacyAdapter;
   private transportManager: TransportManager;
   private apiManager?: ApiManager;
   private serverManager?: ServerManager;
@@ -65,7 +63,6 @@ export class ApplicationOrchestrator {
     this.promptManager = null as any;
     this.promptExecutor = null as any;
     this.mcpToolsManager = null as any;
-    this.legacyAdapter = null as any;
     this.transportManager = null as any;
     this.mcpServer = null as any;
   }
@@ -629,36 +626,14 @@ ${attemptedPaths}
     );
     this.promptExecutor.updatePrompts(this.convertedPrompts);
 
-    // Initialize legacy adapter for backwards compatibility
-    this.legacyAdapter = createLegacyAdapter(
-      this.logger,
-      this.configManager,
-      this.promptManager,
-      this.textReferenceManager,
-      this.conversationManager,
-      this.promptExecutor
-    );
-
     // Initialize MCP tools manager
     this.mcpToolsManager = createMcpToolsManager(
       this.logger,
       this.mcpServer,
       this.promptManager,
       this.configManager,
-      () => this.legacyAdapter.fullServerRefresh(),
-      (restart?: boolean, reason?: string) =>
-        this.legacyAdapter.triggerServerRefresh(restart || false, reason || "")
-    );
-
-    // Update legacy adapter with MCP tools manager
-    this.legacyAdapter = createLegacyAdapter(
-      this.logger,
-      this.configManager,
-      this.promptManager,
-      this.textReferenceManager,
-      this.conversationManager,
-      this.promptExecutor,
-      this.mcpToolsManager
+      () => this.fullServerRefresh(),
+      (reason: string) => this.restartServer(reason)
     );
 
     // Update MCP tools manager with current data
@@ -751,20 +726,73 @@ ${attemptedPaths}
   }
 
   /**
-   * Restart the application
+   * Perform a full server refresh (hot-reload).
+   * This reloads all prompts from disk and updates all relevant modules.
    */
-  async restart(reason: string = "Manual restart"): Promise<void> {
+  public async fullServerRefresh(): Promise<void> {
+    this.logger.info(
+      "🔥 Orchestrator: Starting full server refresh (hot-reload)..."
+    );
     try {
-      this.logger.info(`Restarting application: ${reason}`);
+      // Step 1: Reload all prompt data from disk by re-running the data loading phase.
+      // This updates the orchestrator's internal state with the latest file contents.
+      await this.loadAndProcessData();
+      this.logger.info("✅ Data reloaded and processed from disk.");
 
-      if (this.serverManager) {
-        await this.serverManager.restart(reason);
+      // Step 2: Propagate the new data to all dependent modules.
+      // This ensures all parts of the application are synchronized with the new state.
+      this.promptExecutor.updatePrompts(this.convertedPrompts);
+      this.logger.info("✅ PromptExecutor updated with new prompts.");
+
+      if (this.mcpToolsManager) {
+        this.mcpToolsManager.updateData(
+          this.promptsData,
+          this.convertedPrompts,
+          this.categories
+        );
+        this.logger.info("✅ McpToolsManager updated with new data.");
       }
 
-      this.logger.info("Application restarted successfully");
+      if (this.apiManager) {
+        // The API manager is only available for the SSE transport.
+        this.apiManager.updateData(
+          this.promptsData,
+          this.categories,
+          this.convertedPrompts
+        );
+        this.logger.info("✅ ApiManager updated with new data.");
+      }
+
+      // Step 3: Re-register the newly loaded prompts with the running MCP server instance.
+      // This makes the new/updated prompts available for execution immediately.
+      await this.promptManager.registerAllPrompts(this.convertedPrompts);
+      this.logger.info("✅ Prompts re-registered with MCP Server.");
+
+      this.logger.info("🚀 Full server refresh completed successfully.");
     } catch (error) {
-      this.logger.error("Error during restart:", error);
+      this.logger.error("❌ Error during full server refresh:", error);
+      // Re-throw the error so the caller can handle it appropriately.
       throw error;
+    }
+  }
+
+  /**
+   * Restart the application by shutting down and exiting with a restart code.
+   * Relies on a process manager (e.g., PM2) to restart the process.
+   */
+  public async restartServer(reason: string = "Manual restart"): Promise<void> {
+    this.logger.info(`🚨 Initiating server restart. Reason: ${reason}`);
+    try {
+      // Ensure all current operations are gracefully shut down.
+      await this.shutdown();
+      this.logger.info(
+        "✅ Server gracefully shut down. Exiting with restart code."
+      );
+    } catch (error) {
+      this.logger.error("❌ Error during pre-restart shutdown:", error);
+    } finally {
+      // Exit with a specific code that a process manager can detect.
+      process.exit(100);
     }
   }
 
@@ -792,15 +820,13 @@ ${attemptedPaths}
    */
   getModules() {
     return {
-      configManager: this.configManager,
       logger: this.logger,
+      configManager: this.configManager,
+      promptManager: this.promptManager,
       textReferenceManager: this.textReferenceManager,
       conversationManager: this.conversationManager,
-      promptManager: this.promptManager,
       promptExecutor: this.promptExecutor,
       mcpToolsManager: this.mcpToolsManager,
-      legacyAdapter: this.legacyAdapter,
-      transportManager: this.transportManager,
       apiManager: this.apiManager,
       serverManager: this.serverManager,
     };
@@ -851,47 +877,39 @@ ${attemptedPaths}
     const modulesInitialized = !!(
       this.promptManager &&
       this.promptExecutor &&
-      this.mcpToolsManager &&
-      this.legacyAdapter
+      this.mcpToolsManager
     );
     moduleStatus.modulesInitialized = modulesInitialized;
-    if (!modulesInitialized) {
-      issues.push("Core modules not properly initialized");
-    }
+    moduleStatus.serverRunning = !!(
+      this.serverManager && this.transportManager
+    );
 
-    // Check server status
-    const serverRunning = this.serverManager?.isRunning() || false;
-    moduleStatus.serverRunning = serverRunning;
-    if (!serverRunning) {
-      issues.push("Server not running");
-    }
-
-    // Check individual module health
-    moduleStatus.logger = !!this.logger;
     moduleStatus.configManager = !!this.configManager;
+    moduleStatus.logger = !!this.logger;
+    moduleStatus.promptManager = !!this.promptManager;
     moduleStatus.textReferenceManager = !!this.textReferenceManager;
     moduleStatus.conversationManager = !!this.conversationManager;
-    moduleStatus.promptManager = !!this.promptManager;
     moduleStatus.promptExecutor = !!this.promptExecutor;
     moduleStatus.mcpToolsManager = !!this.mcpToolsManager;
-    moduleStatus.legacyAdapter = !!this.legacyAdapter;
     moduleStatus.transportManager = !!this.transportManager;
+    moduleStatus.apiManager = !!this.apiManager;
     moduleStatus.serverManager = !!this.serverManager;
 
-    const healthy =
+    // Check overall health
+    const isHealthy =
       foundationHealthy &&
       dataLoaded &&
       modulesInitialized &&
-      serverRunning &&
+      moduleStatus.serverRunning &&
       issues.length === 0;
 
     return {
-      healthy,
+      healthy: isHealthy,
       modules: {
         foundation: foundationHealthy,
         dataLoaded,
         modulesInitialized,
-        serverRunning,
+        serverRunning: moduleStatus.serverRunning,
       },
       details: {
         promptsLoaded: this.promptsData.length,

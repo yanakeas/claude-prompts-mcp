@@ -1,0 +1,18 @@
+{
+  "prompts": [
+    {
+      "id": "creative_problem_solver",
+      "name": "Creative Problem Solver",
+      "category": "creative",
+      "description": "A creative problem-solving approach that generates multiple innovative solutions using different thinking frameworks",
+      "file": "creative_problem_solver.md",
+      "arguments": [
+        {
+          "name": "problem",
+          "description": "The problem or challenge that needs creative solutions",
+          "required": true
+        }
+      ]
+    }
+  ]
+}
