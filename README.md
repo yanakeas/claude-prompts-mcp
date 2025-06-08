@@ -520,7 +520,8 @@ Built-in monitoring and diagnostics for production environments:
 | [📝 Prompt Format Guide](docs/prompt-format-guide.md)     | Master prompt creation with examples                              |
 | [🔗 Chain Execution Guide](docs/chain-execution-guide.md) | Build complex multi-step workflows                                |
 | [⚙️ Prompt Management](docs/prompt-management.md)         | Dynamic management and hot-reload features                        |
-| [🚀 API Reference](docs/api-endpoints-reference.md)       | Complete REST API documentation                                   |
+| [🚀 MCP Tools Reference](docs/mcp-tools-reference.md)     | Complete MCP tools documentation                                  |
+| [🗺️ Roadmap & TODO](docs/TODO.md)                         | Planned features and development roadmap                          |
 | [🤝 Contributing](docs/contributing.md)                   | Join our development community                                    |
 
 ## 🤝 Contributing
