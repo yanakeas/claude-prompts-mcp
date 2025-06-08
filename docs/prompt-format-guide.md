@@ -113,9 +113,9 @@ Focus on:
 - Security concerns
 - Readability and maintainability
 
-{{#if best_practices}}
+{% if best_practices %}
 Also check for adherence to {{language}} best practices.
-{{/if}}
+{% endif %}
 
 ## Arguments
 
@@ -293,11 +293,11 @@ You can create dynamic templates that adapt based on the provided arguments:
 ```markdown
 ## User Message Template
 
-{{#if detailed}}
+{% if detailed %}
 Please provide a detailed analysis of {{topic}}, covering all aspects in depth.
-{{else}}
+{% else %}
 Please provide a brief overview of {{topic}}, highlighting only the key points.
-{{/if}}
+{% endif %}
 
 ## Arguments
 

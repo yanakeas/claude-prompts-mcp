@@ -5,6 +5,7 @@ This directory contains comprehensive documentation for the Claude Custom Prompt
 ## Getting Started
 
 - [Installation Guide](installation-guide.md) - Step-by-step instructions for installing and configuring the server
+- [Troubleshooting Guide](troubleshooting.md) - Solutions for common issues and diagnostic tools
 - [Architecture](architecture.md) - Overview of the server's architecture and components
 
 ## Working with Prompts
@@ -27,7 +28,7 @@ This directory contains comprehensive documentation for the Claude Custom Prompt
 The Claude Custom Prompts server includes the following features:
 
 - 🚀 Easy integration with Claude using MCP
-- 📝 Define custom prompt templates using Markdown files 
+- 📝 Define custom prompt templates using Markdown files
 - 🧩 Support for prompt arguments with validation
 - 📚 Organized prompt categories for better management
 - 🔄 Multiple transport options (SSE and STDIO)
@@ -35,4 +36,4 @@ The Claude Custom Prompts server includes the following features:
 - ⛓️ Support for prompt chains to break complex tasks into steps
 - 📂 Distributed prompts configuration with category-specific files
 
-For a quick overview, see the [main README](../README.md) in the project root. 
+For a quick overview, see the [main README](../README.md) in the project root.

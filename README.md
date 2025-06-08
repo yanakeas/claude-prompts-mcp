@@ -1,4 +1,4 @@
-# 🚀 Claude Custom Prompts MCP Server
+# Claude Prompts MCP Server
 
 <div align="center">
 
@@ -8,87 +8,90 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-00ff88.svg?style=for-the-badge&logo=opensource)](https://opensource.org/licenses/MIT)
 [![Model Context Protocol](https://img.shields.io/badge/MCP-Compatible-ff6b35?style=for-the-badge&logo=anthropic)](https://modelcontextprotocol.io)
 [![Node.js](https://img.shields.io/badge/Node.js-16%2B-339933?style=for-the-badge&logo=node.js)](https://nodejs.org)
-[![Claude AI](https://img.shields.io/badge/Claude-AI_Ready-8A2BE2?style=for-the-badge&logo=anthropic)](https://claude.ai)
 
-**🌟 The Next-Gen Model Context Protocol Server for Claude AI**
-_Supercharge your AI workflows with custom prompt templates, chains, and modular organization_
+**🚀 The Universal Model Context Protocol Server for Any MCP Client**
 
-[🚀 Quick Start](#-quick-start) • [📚 Documentation](#-documentation) • [⚡ Features](#-features) • [🛠️ Configuration](#️-configuration) • [🔗 Claude Setup](#-claude-desktop-integration)
+_Supercharge your AI workflows with battle-tested prompt engineering, intelligent orchestration, and lightning-fast hot-reload capabilities. Works seamlessly with Claude Desktop, Cursor Windsurf, and any MCP-compatible client._
+
+[⚡ Quick Start](#-one-command-installation) • [🎯 Features](#-performance--reliability) • [📚 Docs](#-documentation-hub) • [🛠️ Advanced](#-advanced-features)
 
 ---
 
-### 🎯 **Why Choose This MCP Server?**
-
-**Transform your Claude experience** with enterprise-grade prompt management, intelligent categorization, and seamless workflow automation. Built for developers who think beyond 2024.
-
 </div>
 
-## 🌟 **Essential Features**
+## 🌟 What Makes This Special?
 
-🧠 **Intelligent Prompt Management**
-→ _Dynamic template system with real-time reloading_
-→ _Advanced argument validation and type checking_
-→ _Context-aware placeholder resolution_
+- **🔥 Intelligent Hot-Reload System** → Update prompts instantly without restarts
+- **🎯 Advanced Template Engine** → Nunjucks-powered with conditionals, loops, and dynamic data
+- **⚡ Multi-Phase Orchestration** → Robust startup sequence with comprehensive health monitoring
+- **🚀 Universal MCP Compatibility** → Works flawlessly with Claude Desktop, Cursor Windsurf, and any MCP client
+- **🧠 Prompt Chain Workflows** → Build complex multi-step AI processes
+- **📊 Real-Time Diagnostics** → Performance metrics and health validation built-in
 
-⚡ **Next-Gen Workflow Engine**
-→ _Prompt chains for complex multi-step reasoning_
-→ _Modular category-based organization_
-→ _Hot-reload capabilities for instant updates_
+Transform your AI assistant experience from scattered prompts to a **powerful, organized command library** that works across any MCP-compatible platform.
 
-🔮 **Future-Ready Architecture**
-→ _Model Context Protocol (MCP) native implementation_
-→ _Multi-transport support (STDIO/SSE)_
-→ _Distributed configuration system_
-
-🎛️ **Developer Experience 3.0**
-→ _Zero-config setup with intelligent defaults_
-→ _Comprehensive API with RESTful endpoints_
-→ _Built-in troubleshooting and diagnostics_
-
-## 🎖️ **Why Developers Choose This MCP Server**
+## ⚡ Features & Reliability
 
 <table>
 <tr>
 <td width="50%">
 
-**🔥 Battle-Tested Features**
+**🎯 Developer Experience**
 
-- ✅ 100% Model Context Protocol compliant
-- ✅ Hot-reload prompt templates
-- ✅ Advanced argument validation
-- ✅ Multi-step prompt chains
-- ✅ Context-aware placeholders
-- ✅ Distributed configuration
+- 🔥 **One-Command Installation** in under 60 seconds
+- ⚡ **Hot-Reload Everything** → prompts, configs, templates
+- 🎨 **Rich Template Engine** → conditionals, loops, data injection
+- 🚀 **Universal MCP Integration** → works with Claude Desktop, Cursor Windsurf, and any MCP client
+- 📱 **Multi-Transport Support** → STDIO for Claude Desktop + SSE/REST for web
+- 🛠️ **Dynamic Management Tools** → update, delete, reload prompts on-the-fly
 
 </td>
 <td width="50%">
 
-**⚡ Performance & Reliability**
+**🚀 Enterprise Architecture**
 
-- 🚀 Sub-second cold starts
-- 🚀 < 100ms prompt execution
-- 🚀 100+ concurrent connections
-- 🚀 Auto-recovery mechanisms
-- 🚀 Comprehensive error handling
-- 🚀 Production-ready logging
+- 🏗️ **Orchestration** → phased startup with dependency management
+- 🔧 **Robust Error Handling** → graceful degradation with comprehensive logging
+- 📊 **Real-Time Health Monitoring** → module status, performance metrics, diagnostics
+- 🎯 **Smart Environment Detection** → works across development and production contexts
+- ⚙️ **Modular Plugin System** → extensible architecture for custom workflows
+- 🔐 **Production-Ready Security** → input validation, sanitization, error boundaries
+
+</td>
+</tr>
+<tr>
+<td colspan="2">
+
+**🛠️ Complete MCP Tools Suite**
+
+- 🎮 **Process Slash Commands** → `/prompt_name` syntax for instant prompt execution
+- 📋 **List Prompts** → `/listprompts` to discover all available commands with usage examples
+- ✏️ **Update Prompts** → Modify existing prompts with full validation and hot-reload
+- 🗑️ **Delete Prompts** → Remove prompts safely with automatic file cleanup
+- 🔧 **Modify Sections** → Edit specific prompt sections (title, description, templates) on-the-fly
+- 🔄 **Reload System** → Force refresh of all prompts and configurations without server restart
+- ⚙️ **Smart Argument Parsing** → JSON objects, single arguments, or fallback to `{{previous_message}}`
+- 🔗 **Chain Execution** → Multi-step workflow management with step-by-step guidance
 
 </td>
 </tr>
 </table>
 
-## ⚡ **Lightning Fast Setup**
+## 🎯 One-Command Installation
 
-### 🎯 **One-Command Installation**
+Get your AI command center running in **under a minute**:
 
 ```bash
-# Clone → Install → Launch in 30 seconds
+# Clone → Install → Launch → Profit! 🚀
 git clone https://github.com/minipuft/claude-prompts-mcp.git
 cd claude-prompts-mcp/server && npm install && npm run build && npm start
 ```
 
-### 🔌 **Claude Desktop Integration**
+### 🔌 **Universal MCP Client Integration**
 
-Add this configuration to your `claude_desktop_config.json`:
+#### **Claude Desktop**
+
+Drop this into your `claude_desktop_config.json`:
 
 ```json
 {
@@ -104,32 +107,190 @@ Add this configuration to your `claude_desktop_config.json`:
 }
 ```
 
-### 🚀 **Instant Usage**
+#### **Cursor Windsurf & Other MCP Clients**
+
+Configure your MCP client to connect via STDIO transport:
+
+- **Command**: `node`
+- **Args**: `["path/to/claude-prompts-mcp/server/dist/index.js"]`
+- **Environment**: `MCP_PROMPTS_CONFIG_PATH=path/to/promptsConfig.json`
+
+> 💡 **Pro Tip**: Use absolute paths for bulletproof integration across all MCP clients!
+
+### 🎮 **Start Building Immediately**
+
+Your AI command arsenal is ready:
 
 ```bash
-# In Claude Desktop
->>friendly_greeting name="Future Developer"
->>content_analysis_chain text="Your content" "innovation"
->>listprompts  # See all available commands
+# Discover your new superpowers
+>>listprompts
+
+# Execute lightning-fast prompts
+>>friendly_greeting name="Developer"
+
+# Build complex multi-step workflows
+>>analysis_chain text="Your content" focus="key insights"
+
+# Handle complex scenarios with JSON
+>>research_prompt {"topic": "AI trends", "depth": "comprehensive", "format": "executive summary"}
 ```
 
-## 🏗️ **System Architecture**
+## 🔥 Why Developers Choose This Server
+
+<details>
+<summary><strong>⚡ Lightning-Fast Hot-Reload</strong> → Edit prompts, see changes instantly</summary>
+
+Our sophisticated orchestration engine monitors your files and reloads everything seamlessly:
+
+```bash
+# Edit any prompt file → Server detects → Reloads automatically → Zero downtime
+```
+
+- **Instant Updates**: Change templates, arguments, descriptions in real-time
+- **Zero Restart Required**: Advanced hot-reload system keeps everything running
+- **Smart Dependency Tracking**: Only reloads what actually changed
+- **Graceful Error Recovery**: Invalid changes don't crash the server
+
+</details>
+
+<details>
+<summary><strong>🎨 Next-Gen Template Engine</strong> → Nunjucks-powered dynamic prompts</summary>
+
+Go beyond simple text replacement with a full template engine:
+
+```nunjucks
+Analyze {{content}} for {% if focus_area %}{{focus_area}}{% else %}general{% endif %} insights.
+
+{% for requirement in requirements %}
+- Consider: {{requirement}}
+{% endfor %}
+
+{% if previous_context %}
+Build upon: {{previous_context}}
+{% endif %}
+```
+
+- **Conditional Logic**: Smart prompts that adapt based on input
+- **Loops & Iteration**: Handle arrays and complex data structures
+- **Template Inheritance**: Reuse and extend prompt patterns
+- **Real-Time Processing**: Templates render with live data injection
+
+</details>
+
+<details>
+<summary><strong>🏗️ Enterprise-Grade Orchestration</strong> → Multi-phase startup with health monitoring</summary>
+
+Built like production software with comprehensive architecture:
+
+```typescript
+Phase 1: Foundation → Config, logging, core services
+Phase 2: Data Loading → Prompts, categories, validation
+Phase 3: Module Init → Tools, executors, managers
+Phase 4: Server Launch → Transport, API, diagnostics
+```
+
+- **Dependency Management**: Modules start in correct order with validation
+- **Health Monitoring**: Real-time status of all components
+- **Performance Metrics**: Memory usage, uptime, connection tracking
+- **Diagnostic Tools**: Built-in troubleshooting and debugging
+
+</details>
+
+<details>
+<summary><strong>🔄 Intelligent Prompt Chains</strong> → Multi-step AI workflows</summary>
+
+Create sophisticated workflows where each step builds on the previous:
+
+```json
+{
+  "id": "content_analysis_chain",
+  "name": "Content Analysis Chain",
+  "isChain": true,
+  "chainSteps": [
+    {
+      "stepName": "Extract Key Points",
+      "promptId": "extract_key_points",
+      "inputMapping": { "content": "original_content" },
+      "outputMapping": { "key_points": "extracted_points" }
+    },
+    {
+      "stepName": "Analyze Sentiment",
+      "promptId": "sentiment_analysis",
+      "inputMapping": { "text": "extracted_points" },
+      "outputMapping": { "sentiment": "analysis_result" }
+    }
+  ]
+}
+```
+
+- **Visual Step Planning**: See your workflow before execution
+- **Input/Output Mapping**: Data flows seamlessly between steps
+- **Error Recovery**: Failed steps don't crash the entire chain
+- **Flexible Execution**: Run chains or individual steps as needed
+
+</details>
+
+## 📊 System Architecture
 
 ```mermaid
 graph TB
     A[Claude Desktop] -->|MCP Protocol| B[Transport Layer]
-    B --> C[Orchestration Engine]
-    C --> D[Prompt Manager]
-    C --> E[Chain Executor]
-    C --> F[Config Manager]
-    D --> G[Template Engine]
-    E --> H[Step Processor]
-    F --> I[Hot Reload System]
+    B --> C[🧠 Orchestration Engine]
+    C --> D[📝 Prompt Manager]
+    C --> E[🛠️ MCP Tools Manager]
+    C --> F[⚙️ Config Manager]
+    D --> G[🎨 Template Engine]
+    E --> H[🔧 Management Tools]
+    F --> I[🔥 Hot Reload System]
+
+    style C fill:#ff6b35
+    style D fill:#00ff88
+    style E fill:#0066cc
 ```
 
-## 🛠️ **Configuration**
+## 🌐 MCP Client Compatibility
 
-### 📋 **Server Configuration** (`config.json`)
+This server implements the **Model Context Protocol (MCP)** standard and works with any compatible client:
+
+<table>
+<tr>
+<td width="33%">
+
+**✅ Tested & Verified**
+
+- 🎯 **Claude Desktop** → Full integration support
+- 🚀 **Cursor Windsurf** → Native MCP compatibility
+
+</td>
+<td width="33%">
+
+**🔌 Transport Support**
+
+- 📡 **STDIO** → Primary transport for desktop clients
+- 🌐 **Server-Sent Events (SSE)** → Web-based clients
+- 🔗 **REST API** → HTTP-based integrations
+
+</td>
+<td width="34%">
+
+**🎯 Integration Features**
+
+- 🔄 **Auto-Discovery** → Clients detect tools automatically
+- 📋 **Tool Registration** → Dynamic capability announcement
+- ⚡ **Hot Reload** → Changes appear instantly in clients
+- 🛠️ **Error Handling** → Graceful degradation across clients
+
+</td>
+</tr>
+</table>
+
+> 💡 **Developer Note**: As MCP adoption grows, this server will work with any new MCP-compatible AI assistant or development environment without modification.
+
+## 🛠️ Advanced Configuration
+
+### ⚙️ **Server Powerhouse** (`config.json`)
+
+Fine-tune your server's behavior:
 
 ```json
 {
@@ -150,215 +311,199 @@ graph TB
 }
 ```
 
-### 🎛️ **Prompt Categories** (`promptsConfig.json`)
+### 🗂️ **Prompt Organization** (`promptsConfig.json`)
+
+Structure your AI command library:
 
 ```json
 {
   "categories": [
     {
-      "id": "ai-development",
-      "name": "AI Development",
-      "description": "Next-gen AI prompts"
+      "id": "development",
+      "name": "🔧 Development",
+      "description": "Code review, debugging, and development workflows"
     },
     {
-      "id": "future-code",
-      "name": "Future Code",
-      "description": "Advanced programming patterns"
+      "id": "analysis",
+      "name": "📊 Analysis",
+      "description": "Content analysis and research prompts"
+    },
+    {
+      "id": "creative",
+      "name": "🎨 Creative",
+      "description": "Content creation and creative writing"
     }
   ],
   "imports": [
-    "prompts/ai-development/prompts.json",
-    "prompts/future-code/prompts.json"
+    "prompts/development/prompts.json",
+    "prompts/analysis/prompts.json",
+    "prompts/creative/prompts.json"
   ]
 }
 ```
 
-## 🔗 **Advanced Features**
+## 🚀 Advanced Features
 
 <details>
-<summary><strong>🔄 Prompt Chains</strong> - Multi-step AI reasoning</summary>
+<summary><strong>🔄 Multi-Step Prompt Chains</strong> → Build sophisticated AI workflows</summary>
 
-Create complex workflows with sequential prompt execution:
+Create complex workflows that chain multiple prompts together:
 
 ```markdown
-# Future Analysis Chain
+# Research Analysis Chain
 
 ## User Message Template
 
-Analyze {{topic}} for future implications over {{timeframe}}.
+Research {{topic}} and provide {{analysis_type}} analysis.
 
-## Chain Steps
+## Chain Configuration
 
-1. promptId: research_trends
-   stepName: Trend Analysis
-   inputMapping: { topic: topic, period: timeframe }
-   outputMapping: { trends: current_trends }
-
-2. promptId: predict_evolution
-   stepName: Future Prediction
-   inputMapping: { trends: current_trends }
-   outputMapping: { predictions: future_state }
+Steps: research → extract → analyze → summarize
+Input Mapping: {topic} → {content} → {key_points} → {insights}
+Output Format: Structured report with executive summary
 ```
+
+**Capabilities:**
+
+- **Sequential Processing**: Each step uses output from previous step
+- **Parallel Execution**: Run multiple analysis streams simultaneously
+- **Error Recovery**: Graceful handling of failed steps
+- **Custom Logic**: Conditional branching based on intermediate results
 
 </details>
 
 <details>
-<summary><strong>🎯 Smart Placeholders</strong> - Context-aware templates</summary>
+<summary><strong>🎨 Advanced Template Features</strong> → Dynamic, intelligent prompts</summary>
 
-```markdown
-Based on this conversation context:
-{{previous_message}}
+Leverage the full power of Nunjucks templating:
 
-Continue the analysis with focus on {{focus_area}}.
+```nunjucks
+# {{ title | title }} Analysis
+
+## Context
+{% if previous_analysis %}
+Building upon previous analysis: {{ previous_analysis | summary }}
+{% endif %}
+
+## Requirements
+{% for req in requirements %}
+{{loop.index}}. **{{req.priority | upper}}**: {{req.description}}
+   {% if req.examples %}
+   Examples: {% for ex in req.examples %}{{ex}}{% if not loop.last %}, {% endif %}{% endfor %}
+   {% endif %}
+{% endfor %}
+
+## Focus Areas
+{% set focus_areas = focus.split(',') %}
+{% for area in focus_areas %}
+- {{ area | trim | title }}
+{% endfor %}
 ```
+
+**Template Features:**
+
+- **Filters & Functions**: Transform data on-the-fly
+- **Conditional Logic**: Smart branching based on input
+- **Loops & Iteration**: Handle complex data structures
+- **Template Inheritance**: Build reusable prompt components
 
 </details>
 
 <details>
-<summary><strong>🔧 Developer Tools</strong> - Built-in management API</summary>
+<summary><strong>🔧 Real-Time Management Tools</strong> → Hot management without downtime</summary>
+
+Manage your prompts dynamically while the server runs:
 
 ```bash
-# Hot-reload prompts
-curl -X POST http://localhost:9090/api/v1/tools/reload_prompts
+# Update prompts on-the-fly
+>>update_prompt id="analysis_prompt" content="new template"
 
-# Create new prompt
-curl -X POST http://localhost:9090/api/v1/tools/update_prompt \
-  -d '{"id": "future_prompt", "name": "Future Prompt"...}'
+# Add new sections dynamically
+>>modify_prompt_section id="research" section="examples" content="new examples"
+
+# Hot-reload everything
+>>reload_prompts reason="updated templates"
+
+# Full server restart (when needed)
+>>restart_server reason="major config changes"
 ```
+
+**Management Capabilities:**
+
+- **Live Updates**: Change prompts without server restart
+- **Section Editing**: Modify specific parts of prompts
+- **Bulk Operations**: Update multiple prompts at once
+- **Rollback Support**: Undo changes when things go wrong
 
 </details>
-
-## 📚 **Documentation Hub**
-
-| Guide                                                      | Description              | Level        |
-| ---------------------------------------------------------- | ------------------------ | ------------ |
-| [🚀 Quick Start](server/docs/installation-guide.md)        | Get running in 5 minutes | Beginner     |
-| [🎨 Prompt Design](server/docs/prompt-format-guide.md)     | Master template creation | Intermediate |
-| [⛓️ Chain Building](server/docs/chain-execution-guide.md)  | Multi-step workflows     | Advanced     |
-| [🏗️ Architecture](server/docs/architecture.md)             | System internals         | Expert       |
-| [🔌 API Reference](server/docs/api-endpoints-reference.md) | Complete API docs        | Reference    |
-
-## 🚀 **Getting Started**
-
-### 📋 **Prerequisites**
-
-- Node.js v16+
-- npm or yarn package manager
-- Claude Desktop application
-
-### ⚡ **Quick Installation**
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/minipuft/claude-prompts-mcp.git
-cd claude-prompts-mcp/server
-
-# 2. Install dependencies
-npm install
-
-# 3. Build the project
-npm run build
-
-# 4. Start the server
-npm start
-```
-
-### 🔧 **Usage Examples**
-
-```bash
-# List all available prompts
->>listprompts
-
-# Execute a simple prompt
->>friendly_greeting name="AI Developer"
-
-# Run a complex chain
->>content_analysis_chain text="Your analysis text" focus="innovation"
-
-# JSON format arguments
->>research_prompt {"topic": "AI trends", "depth": "comprehensive"}
-```
-
-## 🎯 **Use Cases**
-
-**🚀 For AI Researchers**
-→ Streamline experiment prompts
-→ Chain complex reasoning tasks
-→ Version control prompt templates
-
-**💼 For Enterprise Teams**
-→ Standardize AI interactions
-→ Share prompt libraries
-→ Maintain consistency across projects
-
-**🔮 For Future Builders**
-→ Rapid prototype AI workflows
-→ Build sophisticated prompt chains
-→ Scale AI-powered applications
-
-## 🛟 **Troubleshooting**
 
 <details>
-<summary><strong>🔍 Common Issues & Solutions</strong></summary>
+<summary><strong>📊 Production Monitoring</strong> → Enterprise-grade observability</summary>
 
-| Issue                    | Solution                               | Time to Fix |
-| ------------------------ | -------------------------------------- | ----------- |
-| Prompts not updating     | Restart server or use `reload_prompts` | 30 seconds  |
-| Claude connection failed | Check `cwd` path in config             | 2 minutes   |
-| JSON parsing errors      | Validate JSON syntax                   | 1 minute    |
-| File not found           | Verify working directory               | 2 minutes   |
+Built-in monitoring and diagnostics for production environments:
 
-**💡 Pro Tip:** Enable debug logging with `NODE_ENV=development` for detailed diagnostics.
+```typescript
+// Health Check Response
+{
+  healthy: true,
+  modules: {
+    foundation: true,
+    dataLoaded: true,
+    modulesInitialized: true,
+    serverRunning: true
+  },
+  performance: {
+    uptime: 86400,
+    memoryUsage: { rss: 45.2, heapUsed: 23.1 },
+    promptsLoaded: 127,
+    categoriesLoaded: 8
+  }
+}
+```
+
+**Monitoring Features:**
+
+- **Real-Time Health Checks**: All modules continuously monitored
+- **Performance Metrics**: Memory, uptime, connection tracking
+- **Diagnostic Tools**: Comprehensive troubleshooting information
+- **Error Tracking**: Graceful error handling with detailed logging
 
 </details>
 
-## 🤝 **Contributing to the Future**
+## 📚 Documentation Hub
 
-We welcome contributions from developers building the next generation of AI tools!
+| Guide                                                     | Description                                     |
+| --------------------------------------------------------- | ----------------------------------------------- |
+| [📥 Installation Guide](docs/installation-guide.md)       | Complete setup walkthrough with troubleshooting |
+| [🛠️ Troubleshooting Guide](docs/troubleshooting.md)       | Common issues, diagnostic tools, and solutions  |
+| [🏗️ Architecture Overview](docs/architecture.md)          | Deep dive into system design and components     |
+| [📝 Prompt Format Guide](docs/prompt-format-guide.md)     | Master prompt creation with examples            |
+| [🔗 Chain Execution Guide](docs/chain-execution-guide.md) | Build complex multi-step workflows              |
+| [⚙️ Prompt Management](docs/prompt-management.md)         | Dynamic management and hot-reload features      |
+| [🚀 API Reference](docs/api-endpoints-reference.md)       | Complete REST API documentation                 |
+| [🤝 Contributing](docs/contributing.md)                   | Join our development community                  |
 
-```bash
-# Development setup
-git clone https://github.com/minipuft/claude-prompts-mcp.git
-cd claude-prompts-mcp/server
-npm install
-npm run dev  # Watch mode for development
-```
+## 🤝 Contributing
 
-**🎯 Current Roadmap:**
+We're building the future of AI prompt engineering! Join our community:
 
-- [ ] Web UI for prompt management
-- [ ] Advanced prompt analytics
-- [ ] Multi-model support
-- [ ] Cloud sync capabilities
+- 🐛 **Found a bug?** [Open an issue](https://github.com/minipuft/claude-prompts-mcp/issues)
+- 💡 **Have an idea?** [Start a discussion](https://github.com/minipuft/claude-prompts-mcp/discussions)
+- 🔧 **Want to contribute?** Check our [Contributing Guide](docs/contributing.md)
+- 📖 **Need help?** Visit our [Documentation](docs/README.md)
 
-## 🌐 **Community & Support**
+## 📄 License
 
-<div align="center">
-
-[![GitHub Issues](https://img.shields.io/github/issues/minipuft/claude-prompts-mcp?style=for-the-badge&logo=github)](https://github.com/minipuft/claude-prompts-mcp/issues)
-[![GitHub Stars](https://img.shields.io/github/stars/minipuft/claude-prompts-mcp?style=for-the-badge&logo=github)](https://github.com/minipuft/claude-prompts-mcp/stargazers)
-[![GitHub Forks](https://img.shields.io/github/forks/minipuft/claude-prompts-mcp?style=for-the-badge&logo=github)](https://github.com/minipuft/claude-prompts-mcp/network)
-
-**💬 Join the conversation:** [GitHub Discussions](https://github.com/minipuft/claude-prompts-mcp/discussions)
-**🐛 Report issues:** [GitHub Issues](https://github.com/minipuft/claude-prompts-mcp/issues)
-**⭐ Show support:** [Star this repo](https://github.com/minipuft/claude-prompts-mcp)
-
-</div>
-
-## 🏷️ **SEO Keywords & Topics**
-
-`claude-ai` `model-context-protocol` `mcp-server` `prompt-templates` `ai-workflows` `prompt-chains` `claude-desktop` `anthropic` `ai-automation` `prompt-management` `llm-tools` `ai-development` `claude-prompts` `mcp-tools` `ai-orchestration` `prompt-engineering` `ai-agent` `conversation-ai` `prompt-library` `ai-templates`
-
-</div>
+Released under the [MIT License](LICENSE) - see the file for details.
 
 ---
 
 <div align="center">
 
-**Built with 🧠 by developers thinking beyond 2024**
+**⭐ Star this repo if it's transforming your AI workflow!**
 
-_Licensed under MIT • Built for the future • Powered by Claude AI_
+[Report Bug](https://github.com/minipuft/claude-prompts-mcp/issues) • [Request Feature](https://github.com/minipuft/claude-prompts-mcp/issues) • [View Docs](docs/README.md)
 
-[⬆️ Back to top](#-claude-custom-prompts-mcp-server)
+_Built with ❤️ for the AI development community_
 
 </div>
