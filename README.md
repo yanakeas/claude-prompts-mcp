@@ -30,6 +30,36 @@ _Supercharge your AI workflows with battle-tested prompt engineering, intelligen
 
 Transform your AI assistant experience from scattered prompts to a **powerful, organized command library** that works across any MCP-compatible platform.
 
+## 🚀 Revolutionary Interactive Prompt Management
+
+**🎯 The Future is Here: Manage Your AI's Capabilities FROM WITHIN the AI Conversation**
+
+This isn't just another prompt server – it's a **living, breathing prompt ecosystem** that evolves through natural conversation with your AI assistant. Imagine being able to:
+
+```bash
+# 🗣️ Create new prompts by talking to your AI
+"Hey Claude, create a new prompt called 'code_reviewer' that analyzes code for security issues"
+→ Claude creates, tests, and registers the prompt instantly
+
+# ✏️ Refine prompts through conversation
+"That code reviewer prompt needs to also check for performance issues"
+→ Claude modifies the prompt and hot-reloads it immediately
+
+# 🔍 Discover and iterate on your prompt library
+>>listprompts
+→ Browse your growing collection, then ask: "Improve the research_assistant prompt to be more thorough"
+```
+
+**🌟 Why This Changes Everything:**
+
+- **🔄 Self-Evolving System**: Your AI assistant literally builds and improves its own capabilities in real-time
+- **🎮 No Context Switching**: Never leave your AI conversation to manage prompts – everything happens inline
+- **🧠 Collaborative Intelligence**: You and your AI work together to craft the perfect prompt library
+- **⚡ Instant Gratification**: Create → Test → Refine → Deploy in seconds, not minutes
+- **🌱 Organic Growth**: Your prompt library naturally evolves based on your actual usage patterns
+
+This is what **conversational AI infrastructure** looks like – where the boundary between using AI and building AI capabilities disappears entirely.
+
 ## ⚡ Features & Reliability
 
 <table>
@@ -62,16 +92,17 @@ Transform your AI assistant experience from scattered prompts to a **powerful, o
 <tr>
 <td colspan="2">
 
-**🛠️ Complete MCP Tools Suite**
+**🛠️ Complete Interactive MCP Tools Suite**
 
 - 🎮 **Process Slash Commands** → `/prompt_name` syntax for instant prompt execution
 - 📋 **List Prompts** → `/listprompts` to discover all available commands with usage examples
-- ✏️ **Update Prompts** → Modify existing prompts with full validation and hot-reload
-- 🗑️ **Delete Prompts** → Remove prompts safely with automatic file cleanup
-- 🔧 **Modify Sections** → Edit specific prompt sections (title, description, templates) on-the-fly
-- 🔄 **Reload System** → Force refresh of all prompts and configurations without server restart
+- ✏️ **Update Prompts** → Modify existing prompts through conversation with full validation and hot-reload
+- 🗑️ **Delete Prompts** → Remove prompts by asking your AI assistant - automatic file cleanup included
+- 🔧 **Modify Sections** → "Edit the description of my research prompt" → Done instantly
+- 🔄 **Reload System** → Force refresh through chat - no terminal access needed
 - ⚙️ **Smart Argument Parsing** → JSON objects, single arguments, or fallback to `{{previous_message}}`
-- 🔗 **Chain Execution** → Multi-step workflow management with step-by-step guidance
+- 🔗 **Chain Execution** → Multi-step workflow management with conversational guidance
+- 🎨 **Conversational Creation** → "Create a new prompt that..." → AI builds it for you interactively
 
 </td>
 </tr>
@@ -119,7 +150,7 @@ Configure your MCP client to connect via STDIO transport:
 
 ### 🎮 **Start Building Immediately**
 
-Your AI command arsenal is ready:
+Your AI command arsenal is ready, and it grows **through conversation**:
 
 ```bash
 # Discover your new superpowers
@@ -128,12 +159,24 @@ Your AI command arsenal is ready:
 # Execute lightning-fast prompts
 >>friendly_greeting name="Developer"
 
-# Build complex multi-step workflows
->>analysis_chain text="Your content" focus="key insights"
+# 🚀 NEW: Create prompts by talking to your AI
+"Create a prompt called 'bug_analyzer' that helps me debug code issues systematically"
+→ Your AI creates, tests, and registers the prompt instantly!
+
+# 🔄 Refine prompts through conversation
+"Make the bug_analyzer prompt also suggest performance improvements"
+→ Prompt updated and hot-reloaded automatically
 
 # Handle complex scenarios with JSON
 >>research_prompt {"topic": "AI trends", "depth": "comprehensive", "format": "executive summary"}
+
+# 🧠 Build your custom AI toolkit naturally
+"I need a prompt for writing technical documentation"
+→ "The bug_analyzer needs to also check for security issues"
+→ "Create a prompt chain that reviews code, tests it, then documents it"
 ```
+
+**🌟 The Magic**: Your prompt library becomes a **living extension of your workflow**, growing and adapting as you work with your AI assistant.
 
 ## 🔥 Why Developers Choose This Server
 
@@ -267,8 +310,8 @@ This server implements the **Model Context Protocol (MCP)** standard and works w
 **🔌 Transport Support**
 
 - 📡 **STDIO** → Primary transport for desktop clients
-- 🌐 **Server-Sent Events (SSE)** → Web-based clients
-- 🔗 **REST API** → HTTP-based integrations
+- 🌐 **Server-Sent Events (SSE)** → Web-based clients and integrations
+- 🔗 **HTTP Endpoints** → Basic endpoints for health checks and data queries
 
 </td>
 <td width="34%">
@@ -423,9 +466,6 @@ Manage your prompts dynamically while the server runs:
 
 # Hot-reload everything
 >>reload_prompts reason="updated templates"
-
-# Full server restart (when needed)
->>restart_server reason="major config changes"
 ```
 
 **Management Capabilities:**
@@ -472,16 +512,16 @@ Built-in monitoring and diagnostics for production environments:
 
 ## 📚 Documentation Hub
 
-| Guide                                                     | Description                                     |
-| --------------------------------------------------------- | ----------------------------------------------- |
-| [📥 Installation Guide](docs/installation-guide.md)       | Complete setup walkthrough with troubleshooting |
-| [🛠️ Troubleshooting Guide](docs/troubleshooting.md)       | Common issues, diagnostic tools, and solutions  |
-| [🏗️ Architecture Overview](docs/architecture.md)          | Deep dive into system design and components     |
-| [📝 Prompt Format Guide](docs/prompt-format-guide.md)     | Master prompt creation with examples            |
-| [🔗 Chain Execution Guide](docs/chain-execution-guide.md) | Build complex multi-step workflows              |
-| [⚙️ Prompt Management](docs/prompt-management.md)         | Dynamic management and hot-reload features      |
-| [🚀 API Reference](docs/api-endpoints-reference.md)       | Complete REST API documentation                 |
-| [🤝 Contributing](docs/contributing.md)                   | Join our development community                  |
+| Guide                                                     | Description                                                       |
+| --------------------------------------------------------- | ----------------------------------------------------------------- |
+| [📥 Installation Guide](docs/installation-guide.md)       | Complete setup walkthrough with troubleshooting                   |
+| [🛠️ Troubleshooting Guide](docs/troubleshooting.md)       | Common issues, diagnostic tools, and solutions                    |
+| [🏗️ Architecture Overview](docs/architecture.md)          | A deep dive into the orchestration engine, modules, and data flow |
+| [📝 Prompt Format Guide](docs/prompt-format-guide.md)     | Master prompt creation with examples                              |
+| [🔗 Chain Execution Guide](docs/chain-execution-guide.md) | Build complex multi-step workflows                                |
+| [⚙️ Prompt Management](docs/prompt-management.md)         | Dynamic management and hot-reload features                        |
+| [🚀 API Reference](docs/api-endpoints-reference.md)       | Complete REST API documentation                                   |
+| [🤝 Contributing](docs/contributing.md)                   | Join our development community                                    |
 
 ## 🤝 Contributing
 
