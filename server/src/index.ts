@@ -292,7 +292,7 @@ async function gracefulShutdown(exitCode: number = 0): Promise<void> {
  */
 function showHelp(): void {
   console.log(`
-MCP Claude Prompts Server v2.0 - Optimized Startup
+MCP Claude Prompts Server v1.1.0 - Enhanced Execution & Gate Validation
 
 USAGE:
   node dist/index.js [OPTIONS]

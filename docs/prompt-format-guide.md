@@ -1,6 +1,6 @@
-# Prompt Format Guide
+# Prompt Format Guide (v1.1.0)
 
-This document explains the format and structure of prompts in the Claude Custom Prompts server.
+This document explains the format and structure of prompts in the Claude Custom Prompts server, including the new standardized execution headers and gate validation features introduced in v1.1.0.
 
 ## Prompt Configuration System
 
@@ -14,40 +14,128 @@ Prompts are organized in a distributed configuration system:
 
 For a complete explanation of the configuration structure, see the [Prompt Management](prompt-management.md) documentation.
 
-## Prompt File Structure
+## Intelligent Prompt File Structure (v1.1.0)
 
-Prompt templates are stored as markdown files with a specific structure. Each prompt file must include certain sections, and may optionally include others.
+Prompt templates are stored as markdown files with a specific structure. The system now uses **intelligent semantic analysis** to automatically detect execution requirements, making manual configuration unnecessary.
 
-### Basic Structure
+**Key Enhancement**: Execution headers are now **purely optional hints** - the system automatically detects execution types and requirements from prompt content using advanced semantic analysis.
+
+### Intelligent Structure (Recommended)
 
 ```markdown
 # Prompt Title
 
-Brief description of what the prompt does.
+Brief description of what the prompt does and its purpose.
 
 ## System Message
-
 System instructions for Claude.
 
 ## User Message Template
-
 Template for the user message with {{placeholders}}.
 
 ## Arguments
-
 - argument1: Description of the first argument
 - argument2: Description of the second argument
+```
+
+**🧠 Automatic Detection**: The system automatically analyzes your prompt content to determine:
+- **Execution Type**: Whether it's a template, workflow, or chain
+- **Quality Gates**: Appropriate validation based on complexity
+- **Execution Requirements**: Whether execution or template return is needed
+
+### Optional Enhancement Headers (Legacy)
+
+If you want to provide explicit hints to Claude (completely optional):
+
+```markdown
+# Prompt Title
+
+*Optional execution hints for Claude:*
+**🎯 EXECUTION TYPE**: Workflow Template | Chain Workflow | Template  
+**⚡ EXECUTION REQUIRED**: This template requires execution / outputs instructions
+
+## Description
+Brief description of what the prompt does and its purpose.
+
+## System Message
+System instructions for Claude.
+
+## User Message Template  
+Template for the user message with {{placeholders}}.
+
+## Arguments
+- argument1: Description of the first argument
+- argument2: Description of the second argument
+```
+
+**Note**: Headers like AUTO-EXECUTION, TOOL INTEGRATION, etc. are no longer needed - the system handles execution intelligently.
+
+## Intelligent Analysis System (v1.1.0)
+
+The system now uses advanced semantic analysis to automatically understand prompts without manual configuration:
+
+### Automatic Detection Features
+
+#### **🧠 Semantic Content Analysis**
+The system analyzes prompt content using advanced patterns:
+- **Workflow Detection**: Identifies systematic, framework-based approaches
+- **Action Detection**: Recognizes analysis, processing, and execution requirements  
+- **Instruction Generation**: Detects templates that output step-by-step guidance
+- **Template Information**: Identifies prompts that return data vs. executable content
+
+#### **🎯 Intelligent Classification**
+Prompts are automatically classified into types:
+- **`workflow`**: Requires execution with quality validation (confidence-based)
+- **`chain`**: Multi-step sequential execution with step tracking
+- **`template`**: Returns information or configuration data
+
+#### **🛡️ Auto-Assigned Quality Gates**
+Quality gates are intelligently assigned based on:
+- **Content Complexity**: More arguments = more validation
+- **Analysis Requirements**: Analysis prompts get keyword presence checks
+- **Workflow Patterns**: Step-by-step content gets completion validation
+- **Chain Operations**: Multi-step chains get step completion gates
+
+#### **⚡ Smart Execution Decisions**
+The system automatically decides whether to:
+- **Execute immediately**: For high-confidence workflows
+- **Return template info**: For information-only prompts
+- **Apply quality gates**: Based on prompt complexity and type
+- **Enable step confirmation**: For sensitive or complex chains
+
+### Usage Examples
+
+#### **Simple Usage (Recommended)**
+```bash
+# System automatically detects and executes appropriately
+>>content_analysis "your content here"
+
+# System auto-detects this is a workflow, applies quality gates, executes
+>>notes "research data to analyze" 
+
+# System detects this is a template info request, returns guidance
+>>listprompts
+```
+
+#### **Manual Override (When Needed)**
+```bash
+# Force specific execution mode
+>>execute_prompt {"command": ">>content_analysis data", "execution_mode": "workflow"}
+
+# Enable step confirmation for sensitive workflows  
+>>execute_prompt {"command": ">>notes data", "step_confirmation": true}
 ```
 
 ### Required Sections
 
 1. **Title** (Level 1 Heading): The name of the prompt
-2. **Description** (Text after title): Brief explanation of the prompt's purpose
+2. **Description** (Level 2 Heading): Brief explanation of the prompt's purpose
 3. **User Message Template** (Level 2 Heading): The template for the user message with placeholders
 
 ### Optional Sections
 
 1. **System Message** (Level 2 Heading): Instructions for Claude's behavior
+2. **Execution Headers** (Bold formatted): New standardized execution guidance
 2. **Chain Steps** (Level 2 Heading): For chain prompts, defines the steps in the chain
 
 ## Placeholders and Arguments

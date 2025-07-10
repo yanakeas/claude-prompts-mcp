@@ -1,26 +1,68 @@
 # Content Analysis Prompt
 
+**🎯 EXECUTION TYPE**: Workflow Template  
+**⚡ EXECUTION REQUIRED**: This template outputs analysis instructions that YOU must execute to systematically process the provided content  
+**🔄 AUTO-EXECUTION**: Use `>>execute_prompt {"command": ">>content_analysis [content]", "execution_mode": "workflow"}` for automatic execution with validation  
+**📊 OUTPUT TYPE**: Content analysis workflow with structured breakdown instructions  
+**📋 EXECUTION STEPS**: Apply analysis framework to content, extract insights, create structured output  
+**🔗 CHAIN POSITION**: Standalone analysis (can be used as input for other analysis chains)  
+**🛡️ QUALITY GATES**: Content validation, keyword presence, structured format verification
+
 ## Description
-This prompt helps analyze web content systematically, breaking it down into key components for thorough understanding and evaluation.
+Systematically analyze web content, breaking it down into key components and insights with structured output.
 
 ## System Message
-You are a content analysis expert who specializes in breaking down and analyzing web content systematically. Your analysis is thorough, objective, and follows a structured approach.
+You are a content analysis expert. Follow the provided framework to systematically break down and analyze the given content.
 
 ## User Message Template
-Please analyze the following content systematically:
 
-```
+Perform a comprehensive content analysis of the following material:
+
 {{content}}
-```
 
-Break down your analysis into these components:
-1. **Main Topic/Purpose**: Identify the central theme and purpose of the content.
-2. **Key Points**: List the main arguments, claims, or information presented.
-3. **Evidence Quality**: Evaluate the quality and credibility of evidence provided.
-4. **Logical Structure**: Assess how well the content is organized and if the arguments flow logically.
-5. **Tone and Style**: Analyze the writing style, tone, and rhetorical devices used.
-6. **Audience Analysis**: Identify the intended audience and how the content is tailored to them.
-7. **Bias Assessment**: Identify any potential biases or slants in the presentation.
-8. **Gaps and Limitations**: Note any missing information or limitations in the content.
+**ANALYSIS FRAMEWORK - Execute each step systematically:**
 
-For each component, provide specific examples from the text to support your analysis. 
+### 1. Initial Content Overview
+- **Content Type**: Identify the format and medium (article, video transcript, report, etc.)
+- **Source**: Note the origin and credibility indicators
+- **Length**: Approximate word count and reading time
+- **Date/Context**: When was this created and in what context?
+
+### 2. Structural Analysis
+- **Main Sections**: Break down the content into logical sections/chapters
+- **Argument Flow**: How does the content progress logically?
+- **Supporting Elements**: What evidence, examples, or data are used?
+- **Visual Elements**: Any charts, images, or multimedia components?
+
+### 3. Key Themes & Topics
+- **Primary Theme**: What is the main subject or thesis?
+- **Secondary Themes**: What supporting topics are covered?
+- **Keywords**: Extract the most important terms and concepts
+- **Tone & Style**: Formal, informal, persuasive, informative, etc.
+
+### 4. Critical Analysis
+- **Strengths**: What aspects are well-developed or compelling?
+- **Weaknesses**: What gaps, biases, or unclear areas exist?
+- **Evidence Quality**: How strong is the supporting evidence?
+- **Logical Consistency**: Are the arguments coherent and well-reasoned?
+
+### 5. Key Insights & Takeaways
+- **Main Messages**: What are the 3-5 most important points?
+- **Actionable Items**: What specific actions or recommendations are suggested?
+- **Implications**: What are the broader consequences or applications?
+- **Questions Raised**: What important questions does this content raise?
+
+### 6. Content Categorization
+- **Audience**: Who is the intended audience?
+- **Purpose**: What is the content trying to achieve?
+- **Genre/Category**: How would you classify this content?
+- **Complexity Level**: Beginner, intermediate, or advanced?
+
+### 7. Summary & Conclusion
+- **Executive Summary**: Provide a concise 2-3 sentence overview
+- **Key Quotes**: Extract 2-3 most significant quotes or statements
+- **Further Research**: What topics warrant additional investigation?
+- **Related Content**: What other materials would complement this?
+
+**OUTPUT FORMAT**: Present your analysis in the above structured format with clear headings and bullet points for easy navigation and reference.
+

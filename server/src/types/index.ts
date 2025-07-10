@@ -118,6 +118,10 @@ export interface ConvertedPrompt {
   tools?: boolean; // Whether this prompt should use available tools
   /** Defines behavior when prompt is invoked without its defined arguments */
   onEmptyInvocation?: "execute_if_possible" | "return_template";
+  // Gate validation properties
+  gates?: GateDefinition[];
+  executionMode?: 'auto' | 'template' | 'chain' | 'workflow';
+  requiresExecution?: boolean; // Whether this prompt should be executed rather than returned
 }
 
 // Prompt Loading Types
@@ -204,6 +208,83 @@ export interface ExpressResponse {
   on: (event: string, callback: () => void) => void;
 }
 
+// Gate Validation Types
+export interface GateRequirement {
+  type: 'content_length' | 'keyword_presence' | 'format_validation' | 'section_validation' | 'custom';
+  criteria: any;
+  weight?: number;
+  required?: boolean;
+}
+
+export interface GateDefinition {
+  id: string;
+  name: string;
+  type: 'validation' | 'approval' | 'condition' | 'quality';
+  requirements: GateRequirement[];
+  failureAction: 'stop' | 'retry' | 'skip' | 'rollback';
+  retryPolicy?: {
+    maxRetries: number;
+    retryDelay: number;
+  };
+}
+
+export interface GateEvaluationResult {
+  requirementId: string;
+  passed: boolean;
+  score?: number;
+  message?: string;
+  details?: any;
+}
+
+export interface GateStatus {
+  gateId: string;
+  passed: boolean;
+  requirements: GateRequirement[];
+  evaluationResults: GateEvaluationResult[];
+  timestamp: number;
+  retryCount?: number;
+}
+
+export interface ExecutionState {
+  type: 'single' | 'chain' | 'workflow';
+  promptId: string;
+  status: 'pending' | 'running' | 'waiting_gate' | 'completed' | 'failed' | 'retrying';
+  currentStep?: number;
+  totalSteps?: number;
+  gates: GateStatus[];
+  results: Record<string, any>;
+  metadata: {
+    startTime: number;
+    endTime?: number;
+    executionMode?: 'auto' | 'template' | 'chain' | 'workflow';
+    stepConfirmation?: boolean;
+    gateValidation?: boolean;
+  };
+}
+
+export interface StepResult {
+  content: string;
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
+  timestamp: number;
+  validationResults?: ValidationResult[];
+  gateResults?: GateStatus[];
+  metadata?: Record<string, any>;
+}
+
+// Enhanced Chain Execution Types
+export interface EnhancedChainExecutionState {
+  chainId: string;
+  currentStepIndex: number;
+  totalSteps: number;
+  startTime: number;
+  status: 'pending' | 'running' | 'waiting_gate' | 'completed' | 'failed';
+  stepResults: Record<string, StepResult>;
+  gates: Record<string, GateStatus>;
+  executionMode: 'auto' | 'chain' | 'workflow';
+  gateValidation: boolean;
+  stepConfirmation: boolean;
+}
+
 // Constants and Enums
 export const MAX_HISTORY_SIZE = 100;
 
@@ -217,4 +298,26 @@ export enum LogLevel {
 export enum TransportType {
   STDIO = "stdio",
   SSE = "sse",
+}
+
+export enum ExecutionMode {
+  AUTO = "auto",
+  TEMPLATE = "template", 
+  CHAIN = "chain",
+  WORKFLOW = "workflow",
+}
+
+export enum StepStatus {
+  PENDING = "pending",
+  RUNNING = "running",
+  COMPLETED = "completed",
+  FAILED = "failed",
+  SKIPPED = "skipped",
+}
+
+export enum GateType {
+  VALIDATION = "validation",
+  APPROVAL = "approval",
+  CONDITION = "condition",
+  QUALITY = "quality",
 }

@@ -8,5 +8,6 @@
 
 - [MCP Tools Reference](mcp-tools-reference.md) - Complete reference for the server's MCP tools
 - [Index.ts Reference](index-ts-reference.md) - Documentation for the main server file
+- [Version History](version-history.md) - Complete version history and release notes
 
 ## Contributing

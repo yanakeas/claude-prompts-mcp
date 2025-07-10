@@ -1,28 +1,6 @@
 {
   "prompts": [
     {
-      "id": "content_analysis",
-      "name": "Content Analysis",
-      "category": "analysis",
-      "description": "Systematically analyze web content, breaking it down into key components.",
-      "file": "content_analysis.md",
-      "arguments": [
-        {
-          "name": "content",
-          "description": "The content to be analyzed",
-          "required": false
-        }
-      ]
-    },
-    {
-      "id": "deep_analysis",
-      "name": "Deep Analysis",
-      "category": "analysis",
-      "description": "Expand on a previous analysis by diving deeper into information, identifying key insights and relationships.",
-      "file": "deep_analysis.md",
-      "arguments": []
-    },
-    {
       "id": "progressive_research",
       "name": "Progressive Research Assistant",
       "category": "analysis",
@@ -103,6 +81,60 @@
       ]
     },
     {
+      "id": "advanced_analysis_engine",
+      "name": "Advanced Analysis Engine",
+      "category": "analysis",
+      "description": "Complex template testing prompt with advanced Nunjucks features including conditionals, loops, inheritance, filters, and multi-format output generation. Designed to stress-test the template engine with maximum complexity.",
+      "file": "advanced_analysis_engine.md",
+      "arguments": [
+        {
+          "name": "topic",
+          "description": "Main topic or subject for analysis",
+          "required": true
+        },
+        {
+          "name": "analysis_type",
+          "description": "Type of analysis: market, technical, competitive, trend, risk, opportunity",
+          "required": false
+        },
+        {
+          "name": "sources",
+          "description": "Array of data sources: web, papers, news, social, industry, expert",
+          "required": false
+        },
+        {
+          "name": "depth",
+          "description": "Analysis depth: surface, standard, comprehensive, expert",
+          "required": false
+        },
+        {
+          "name": "format",
+          "description": "Output format: executive_summary, technical_report, presentation, research_paper",
+          "required": false
+        },
+        {
+          "name": "focus_areas",
+          "description": "Array of focus areas: technical, business, ethical, regulatory, social, environmental",
+          "required": false
+        },
+        {
+          "name": "constraints",
+          "description": "Object with constraints like time_limit, budget, scope, audience",
+          "required": false
+        },
+        {
+          "name": "requirements",
+          "description": "Array of specific requirements or objects with category, description, priority, examples",
+          "required": false
+        },
+        {
+          "name": "previous_context",
+          "description": "Previous analysis context to build upon",
+          "required": false
+        }
+      ]
+    },
+    {
       "id": "notes",
       "name": "Notes",
       "category": "analysis",
@@ -113,6 +145,42 @@
           "name": "content",
           "description": "The content to be processed through the analysis chain",
           "required": false
+        }
+      ]
+    },
+    {
+      "id": "content_analysis",
+      "name": "Content Analysis",
+      "category": "analysis",
+      "description": "Systematically analyze web content, breaking it down into key components.",
+      "file": "content_analysis.md",
+      "arguments": [
+        {
+          "name": "content",
+          "description": "The content to be analyzed",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "deep_analysis",
+      "name": "Deep Analysis",
+      "category": "analysis",
+      "description": "Expand on a previous analysis by diving deeper into information, identifying key insights and relationships.",
+      "file": "deep_analysis.md",
+      "arguments": []
+    },
+    {
+      "id": "intelligent_test",
+      "name": "Intelligent Analysis Test",
+      "category": "analysis",
+      "description": "Test prompt for intelligent semantic analysis without execution headers - should auto-detect as workflow",
+      "file": "intelligent_test.md",
+      "arguments": [
+        {
+          "name": "data",
+          "description": "The information or content to be analyzed",
+          "required": true
         }
       ]
     }

@@ -1,118 +1,6 @@
 {
   "prompts": [
     {
-      "id": "deep_research_chain",
-      "name": "Deep Research Chain",
-      "category": "research-tools",
-      "description": "A comprehensive multi-step research process that explores a topic in depth, identifies key insights, and synthesizes findings into a structured report.",
-      "file": "deep_research_chain.md",
-      "arguments": [
-        {
-          "name": "topic",
-          "description": "The primary research topic to investigate thoroughly",
-          "required": true
-        },
-        {
-          "name": "depth",
-          "description": "Research depth (basic, intermediate, advanced, expert)",
-          "required": false
-        },
-        {
-          "name": "format",
-          "description": "Output format (report, outline, summary, analysis)",
-          "required": false
-        }
-      ],
-      "isChain": true,
-      "chainSteps": [
-        {
-          "promptId": "topic-exploration",
-          "stepName": "Initial Topic Exploration (Step 1 of 6)",
-          "inputMapping": {
-            "topic": "topic"
-          },
-          "outputMapping": {
-            "keyAreas": "keyAreas",
-            "mainQuestions": "mainQuestions",
-            "relevantContexts": "relevantContexts"
-          }
-        },
-        {
-          "promptId": "research-planning",
-          "stepName": "Research Planning (Step 2 of 6)",
-          "inputMapping": {
-            "topic": "topic",
-            "keyAreas": "keyAreas",
-            "mainQuestions": "mainQuestions",
-            "depth": "depth"
-          },
-          "outputMapping": {
-            "researchPlan": "researchPlan",
-            "methodologies": "methodologies",
-            "subtopics": "subtopics"
-          }
-        },
-        {
-          "promptId": "information-gathering",
-          "stepName": "Deep Information Gathering (Step 3 of 6)",
-          "inputMapping": {
-            "topic": "topic",
-            "researchPlan": "researchPlan",
-            "subtopics": "subtopics",
-            "depth": "depth"
-          },
-          "outputMapping": {
-            "collectedData": "collectedData",
-            "sourcesAnalysis": "sourcesAnalysis"
-          }
-        },
-        {
-          "promptId": "critical-analysis",
-          "stepName": "Critical Analysis (Step 4 of 6)",
-          "inputMapping": {
-            "topic": "topic",
-            "collectedData": "collectedData",
-            "sourcesAnalysis": "sourcesAnalysis"
-          },
-          "outputMapping": {
-            "keyInsights": "keyInsights",
-            "emergentPatterns": "emergentPatterns",
-            "counterpoints": "counterpoints"
-          }
-        },
-        {
-          "promptId": "synthesis-integration",
-          "stepName": "Synthesis and Integration (Step 5 of 6)",
-          "inputMapping": {
-            "topic": "topic",
-            "keyInsights": "keyInsights",
-            "emergentPatterns": "emergentPatterns",
-            "counterpoints": "counterpoints"
-          },
-          "outputMapping": {
-            "synthesizedContent": "synthesizedContent",
-            "theoreticalFramework": "theoreticalFramework"
-          }
-        },
-        {
-          "promptId": "report-generation",
-          "stepName": "Research Report Generation (Step 6 of 6)",
-          "inputMapping": {
-            "topic": "topic",
-            "synthesizedContent": "synthesizedContent",
-            "theoreticalFramework": "theoreticalFramework",
-            "format": "format",
-            "depth": "depth"
-          },
-          "outputMapping": {
-            "finalReport": "finalReport",
-            "suggestedNextSteps": "suggestedNextSteps",
-            "limitations": "limitations"
-          }
-        }
-      ]
-    },
-    {
       "id": "topic-exploration",
       "name": "Initial Topic Exploration",
       "category": "research-tools",
@@ -282,6 +170,118 @@
           "name": "topic",
           "description": "The subject to research in depth",
           "required": true
+        }
+      ]
+    },
+    {
+      "id": "deep_research_chain",
+      "name": "Deep Research Chain",
+      "category": "research-tools",
+      "description": "A comprehensive multi-step research process that explores a topic in depth, identifies key insights, and synthesizes findings into a structured report.",
+      "file": "deep_research_chain.md",
+      "arguments": [
+        {
+          "name": "topic",
+          "description": "The primary research topic to investigate thoroughly",
+          "required": true
+        },
+        {
+          "name": "depth",
+          "description": "Research depth (basic, intermediate, advanced, expert)",
+          "required": false
+        },
+        {
+          "name": "format",
+          "description": "Output format (report, outline, summary, analysis)",
+          "required": false
+        }
+      ],
+      "isChain": true,
+      "chainSteps": [
+        {
+          "promptId": "topic-exploration",
+          "stepName": "Initial Topic Exploration (Step 1 of 6)",
+          "inputMapping": {
+            "topic": "topic"
+          },
+          "outputMapping": {
+            "keyAreas": "keyAreas",
+            "mainQuestions": "mainQuestions",
+            "relevantContexts": "relevantContexts"
+          }
+        },
+        {
+          "promptId": "research-planning",
+          "stepName": "Research Planning (Step 2 of 6)",
+          "inputMapping": {
+            "topic": "topic",
+            "keyAreas": "keyAreas",
+            "mainQuestions": "mainQuestions",
+            "depth": "depth"
+          },
+          "outputMapping": {
+            "researchPlan": "researchPlan",
+            "methodologies": "methodologies",
+            "subtopics": "subtopics"
+          }
+        },
+        {
+          "promptId": "information-gathering",
+          "stepName": "Deep Information Gathering (Step 3 of 6)",
+          "inputMapping": {
+            "topic": "topic",
+            "researchPlan": "researchPlan",
+            "subtopics": "subtopics",
+            "depth": "depth"
+          },
+          "outputMapping": {
+            "collectedData": "collectedData",
+            "sourcesAnalysis": "sourcesAnalysis"
+          }
+        },
+        {
+          "promptId": "critical-analysis",
+          "stepName": "Critical Analysis (Step 4 of 6)",
+          "inputMapping": {
+            "topic": "topic",
+            "collectedData": "collectedData",
+            "sourcesAnalysis": "sourcesAnalysis"
+          },
+          "outputMapping": {
+            "keyInsights": "keyInsights",
+            "emergentPatterns": "emergentPatterns",
+            "counterpoints": "counterpoints"
+          }
+        },
+        {
+          "promptId": "synthesis-integration",
+          "stepName": "Synthesis and Integration (Step 5 of 6)",
+          "inputMapping": {
+            "topic": "topic",
+            "keyInsights": "keyInsights",
+            "emergentPatterns": "emergentPatterns",
+            "counterpoints": "counterpoints"
+          },
+          "outputMapping": {
+            "synthesizedContent": "synthesizedContent",
+            "theoreticalFramework": "theoreticalFramework"
+          }
+        },
+        {
+          "promptId": "report-generation",
+          "stepName": "Research Report Generation (Step 6 of 6)",
+          "inputMapping": {
+            "topic": "topic",
+            "synthesizedContent": "synthesizedContent",
+            "theoreticalFramework": "theoreticalFramework",
+            "format": "format",
+            "depth": "depth"
+          },
+          "outputMapping": {
+            "finalReport": "finalReport",
+            "suggestedNextSteps": "suggestedNextSteps",
+            "limitations": "limitations"
+          }
         }
       ]
     }

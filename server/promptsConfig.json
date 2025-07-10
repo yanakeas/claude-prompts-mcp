@@ -64,6 +64,21 @@
       "id": "creative",
       "name": "Creative",
       "description": "Prompts related to Creative"
+    },
+    {
+      "id": "debugging",
+      "name": "debugging",
+      "description": "Prompts related to debugging"
+    },
+    {
+      "id": "content_processing",
+      "name": "content_processing",
+      "description": "Prompts related to content_processing"
+    },
+    {
+      "id": "system",
+      "name": "System",
+      "description": "Prompts related to System"
     }
   ],
   "prompts": [],
@@ -77,6 +92,9 @@
     "prompts/documentation/prompts.json",
     "prompts/examples/prompts.json",
     "prompts/creative-tools/prompts.json",
-    "prompts/creative/prompts.json"
+    "prompts/creative/prompts.json",
+    "prompts/debugging/prompts.json",
+    "prompts/content_processing/prompts.json",
+    "prompts/system/prompts.json"
   ]
 }

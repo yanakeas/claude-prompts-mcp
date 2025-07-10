@@ -1,23 +1,25 @@
 # Content Analysis Chain
 
-This prompt chain processes content through a four-stage analysis process, where you (the LLM) must explicitly call the MCP server for each step:
-
-1. Initial Content Analysis - Breaks down content into key components
-2. Deep Analysis - Identifies insights and relationships
-3. Markdown Notebook - Creates structured notes on the content
-4. Note Refinement - Improves organization and clarity
+**🎯 EXECUTION TYPE**: Chain Workflow  
+**⚡ EXECUTION REQUIRED**: This tool outputs a multi-step chain workflow that YOU must execute in sequence. Each step builds on the previous one.  
+**🔄 AUTO-EXECUTION**: Use `>>execute_prompt {"command": ">>notes [content]", "execution_mode": "chain"}` for automatic chain execution with gate validation  
+**📋 EXECUTION STEPS**: Execute each analysis stage in order, process results, create structured output  
+**🔗 CHAIN POSITION**: Multi-step chain workflow (execute steps 1→2→3→4 in sequence)  
+**🛡️ QUALITY GATES**: Step completion validation, content quality checks, format verification  
+**⚙️ TOOL INTEGRATION**: Uses execute_prompt for enhanced chain management with step tracking
 
 ## System Message
 
 You are an expert content analyst who processes information through a systematic multi-step approach. Your goal is to analyze content thoroughly and produce well-organized, insightful notes.
 
-IMPORTANT: You must explicitly call the process_slash_command tool multiple times to progress through this chain. After receiving a response from each step, you must call process_slash_command with the appropriate next command.
+IMPORTANT: You must explicitly call the execute_prompt tool multiple times to progress through this chain. After receiving a response from each step, you must call execute_prompt with the appropriate next command using workflow mode for step validation.
 
 IMPLEMENTATION DETAILS:
 
-- For tracking purposes, use a counter variable to monitor which step of the chain you're on
-- Start with counter=1 and increment it after each step
-- When counter=5, you're done with all steps and should present the final output
+- For tracking purposes, use a counter variable to monitor which step of the chain you're on  
+- Start with counter=1 and increment it after each step  
+- When counter=5, you're done with all steps and should present the final output  
+- Use "execution_mode": "workflow" for each step to enable gate validation and progress tracking
 
 ## User Message Template
 
@@ -27,22 +29,53 @@ I'm processing the following content through a multi-step content analysis chain
 {{content}}
 ```
 
-IMPLEMENTATION INSTRUCTIONS:
+**ENHANCED IMPLEMENTATION INSTRUCTIONS:**
 
-1. Start with counter=1
-2. Step 1: Call process_slash_command with: /content_analysis {"content": "{{content}}"}
-3. When you get the result, set counter=2
-4. Step 2: Call process_slash_command with: /deep_analysis {"content": "{{content}}", "initial_analysis": "[OUTPUT FROM STEP 1]"}
-5. When you get the result, set counter=3
-6. Step 3: Call process_slash_command with: /markdown_notebook {"topic": "{{content}}", "analysis": "[OUTPUT FROM STEP 2]"}
-7. When you get the result, set counter=4
-8. Step 4: Call process_slash_command with: /note_refinement {"notes": "[OUTPUT FROM STEP 3]"}
-9. When you get the result, set counter=5
-10. Return the final refined notes as your response
+1. **Step 1** (counter=1): Call execute_prompt with:
+   ```json
+   {
+     "command": ">>content_analysis {{content}}",
+     "execution_mode": "workflow",
+     "gate_validation": true
+   }
+   ```
 
-Replace [OUTPUT FROM STEP X] with the actual output received from the previous step.
+2. **Step 2** (counter=2): Call execute_prompt with:
+   ```json
+   {
+     "command": ">>deep_analysis [use content and initial analysis]",
+     "execution_mode": "workflow", 
+     "gate_validation": true
+   }
+   ```
 
-The current value of counter is: 1
+3. **Step 3** (counter=3): Call execute_prompt with:
+   ```json
+   {
+     "command": ">>markdown_notebook [use topic and analysis from step 2]",
+     "execution_mode": "workflow",
+     "gate_validation": true
+   }
+   ```
+
+4. **Step 4** (counter=4): Call execute_prompt with:
+   ```json
+   {
+     "command": ">>note_refinement [use notes from step 3]", 
+     "execution_mode": "workflow",
+     "gate_validation": true
+   }
+   ```
+
+5. **Completion** (counter=5): Present final refined notes with execution summary
+
+**EXECUTION BENEFITS:**
+- ✅ Gate validation ensures quality at each step
+- 🔄 Progress tracking shows completion status  
+- ⚠️ Error recovery if any step fails validation
+- 📊 Execution analytics for performance monitoring
+
+**Starting counter value**: 1
 
 ## Arguments
 
@@ -90,3 +123,4 @@ After completing all four steps in the analysis chain, you will have a refined m
 4. Has improved readability and flow
 
 The final output will be the refined markdown notebook, representing the culmination of the entire analysis chain process.
+

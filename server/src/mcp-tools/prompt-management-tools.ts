@@ -10,6 +10,7 @@ import { z } from "zod";
 import { ConfigManager } from "../config/index.js";
 import { Logger } from "../logging/index.js";
 import { modifyPromptSection, safeWriteFile } from "../prompts/promptUtils.js";
+import { SemanticAnalyzer, PromptClassification } from "../utils/semanticAnalyzer.js";
 import {
   ConvertedPrompt,
   PromptData,
@@ -25,6 +26,7 @@ export class PromptManagementTools {
   private configManager: ConfigManager;
   private promptsData: PromptData[] = [];
   private convertedPrompts: ConvertedPrompt[] = [];
+  private semanticAnalyzer: SemanticAnalyzer;
   private onRefresh: () => Promise<void>;
   private onRestart: (reason: string) => Promise<void>;
 
@@ -38,6 +40,7 @@ export class PromptManagementTools {
     this.logger = logger;
     this.mcpServer = mcpServer;
     this.configManager = configManager;
+    this.semanticAnalyzer = new SemanticAnalyzer();
     this.onRefresh = onRefresh;
     this.onRestart = onRestart;
   }
@@ -51,6 +54,103 @@ export class PromptManagementTools {
   ): void {
     this.promptsData = promptsData;
     this.convertedPrompts = convertedPrompts;
+  }
+
+  /**
+   * Analyze a prompt and generate intelligent feedback
+   */
+  private analyzePromptIntelligence(promptData: PromptData, userMessageTemplate: string, systemMessage?: string, isChain?: boolean, chainSteps?: any[]): {
+    classification: PromptClassification;
+    feedback: string;
+    suggestions: string[];
+  } {
+    // Create a temporary ConvertedPrompt for analysis
+    const tempPrompt: ConvertedPrompt = {
+      id: promptData.id,
+      name: promptData.name,
+      description: promptData.description,
+      category: promptData.category,
+      systemMessage,
+      userMessageTemplate,
+      arguments: promptData.arguments || [],
+      isChain: isChain || false,
+      chainSteps: chainSteps || []
+    };
+
+    const classification = this.semanticAnalyzer.analyzePrompt(tempPrompt);
+    
+    // Generate intelligent feedback
+    const confidence = Math.round(classification.confidence * 100);
+    let feedback = `🧠 **Intelligent Analysis**: ${classification.executionType} (${confidence}% confidence)\n`;
+    feedback += `⚡ **Execution Required**: ${classification.requiresExecution ? 'Yes' : 'No'}\n`;
+    
+    if (classification.suggestedGates.length > 0) {
+      feedback += `🛡️ **Auto-assigned Gates**: ${classification.suggestedGates.join(', ')}\n`;
+    }
+
+    // Generate suggestions for improvement
+    const suggestions: string[] = [];
+    
+    if (classification.confidence < 0.7) {
+      suggestions.push("Consider adding more structured language to improve execution confidence");
+    }
+    
+    if (classification.confidence < 0.5) {
+      suggestions.push("Add framework or systematic approach keywords for better detection");
+    }
+    
+    if (classification.requiresExecution && !userMessageTemplate.toLowerCase().includes('step')) {
+      suggestions.push("Consider adding step-by-step structure for clearer execution guidance");
+    }
+    
+    if (promptData.arguments.length > 3 && classification.confidence < 0.8) {
+      suggestions.push("Complex prompts benefit from clear section headers and structured templates");
+    }
+
+    return { classification, feedback, suggestions };
+  }
+
+  /**
+   * Compare two prompt analyses and generate change feedback
+   */
+  private comparePromptAnalyses(
+    before: PromptClassification, 
+    after: PromptClassification,
+    promptId: string
+  ): string {
+    const beforeConfidence = Math.round(before.confidence * 100);
+    const afterConfidence = Math.round(after.confidence * 100);
+    
+    let comparison = `📊 **Analysis Comparison for ${promptId}**:\n`;
+    
+    if (before.executionType !== after.executionType) {
+      comparison += `🔄 **Type Changed**: ${before.executionType} → ${after.executionType}\n`;
+    }
+    
+    if (Math.abs(before.confidence - after.confidence) > 0.1) {
+      const trend = after.confidence > before.confidence ? "📈 Improved" : "📉 Decreased";
+      comparison += `${trend} **Confidence**: ${beforeConfidence}% → ${afterConfidence}%\n`;
+      
+      if (after.confidence < before.confidence) {
+        comparison += `⚠️ **Warning**: Confidence decreased - consider reviewing changes\n`;
+      }
+    }
+    
+    // Compare suggested gates
+    const beforeGates = new Set(before.suggestedGates);
+    const afterGates = new Set(after.suggestedGates);
+    const addedGates = [...afterGates].filter(g => !beforeGates.has(g));
+    const removedGates = [...beforeGates].filter(g => !afterGates.has(g));
+    
+    if (addedGates.length > 0) {
+      comparison += `✅ **Added Gates**: ${addedGates.join(', ')}\n`;
+    }
+    
+    if (removedGates.length > 0) {
+      comparison += `❌ **Removed Gates**: ${removedGates.join(', ')}\n`;
+    }
+    
+    return comparison;
   }
 
   /**
@@ -150,6 +250,31 @@ export class PromptManagementTools {
           this.logger.info(`Updating prompt: ${args.id}`);
 
           const result = await this.updatePromptImplementation(args);
+          
+          // Perform intelligent analysis on the new/updated prompt
+          const promptData: PromptData = {
+            id: args.id,
+            name: args.name,
+            category: args.category,
+            description: args.description,
+            file: `${args.id}.md`,
+            arguments: args.arguments,
+            onEmptyInvocation: args.onEmptyInvocation
+          };
+          
+          const analysis = this.analyzePromptIntelligence(promptData, args.userMessageTemplate, args.systemMessage, args.isChain, args.chainSteps);
+          
+          // Create enhanced response with intelligent feedback
+          let enhancedMessage = `${result.message}\n\n`;
+          enhancedMessage += `${analysis.feedback}\n`;
+          
+          if (analysis.suggestions.length > 0) {
+            enhancedMessage += `💡 **Suggestions for Improvement**:\n`;
+            analysis.suggestions.forEach((suggestion, index) => {
+              enhancedMessage += `   ${index + 1}. ${suggestion}\n`;
+            });
+            enhancedMessage += `\n`;
+          }
 
           if (args.fullServerRestart) {
             setTimeout(
@@ -160,7 +285,7 @@ export class PromptManagementTools {
               content: [
                 {
                   type: "text" as const,
-                  text: `${result.message}\n\nFull server restart initiated as requested...`,
+                  text: `${enhancedMessage}Full server restart initiated as requested...`,
                 },
               ],
             };
@@ -174,7 +299,7 @@ export class PromptManagementTools {
               content: [
                 {
                   type: "text" as const,
-                  text: `${result.message} Changes were hot-reloaded.`,
+                  text: `${enhancedMessage}Changes were hot-reloaded.`,
                 },
               ],
             };
@@ -704,6 +829,14 @@ export class PromptManagementTools {
             `Attempting to modify section '${args.section_name}' of prompt '${args.id}'`
           );
 
+          // Get current prompt data for before analysis
+          const currentPrompt = this.convertedPrompts.find(p => p.id === args.id);
+          let beforeAnalysis: PromptClassification | null = null;
+          
+          if (currentPrompt) {
+            beforeAnalysis = this.semanticAnalyzer.analyzePrompt(currentPrompt);
+          }
+
           const PROMPTS_FILE = this.configManager.getPromptsFilePath();
           const result = await modifyPromptSection(
             args.id,
@@ -711,6 +844,27 @@ export class PromptManagementTools {
             args.new_content,
             PROMPTS_FILE
           );
+          
+          // Generate after analysis if we have a current prompt to compare
+          let analysisComparison = "";
+          if (beforeAnalysis && currentPrompt) {
+            // Create updated prompt for analysis
+            const updatedPrompt = { ...currentPrompt };
+            if (args.section_name.toLowerCase() === "user message template") {
+              updatedPrompt.userMessageTemplate = args.new_content;
+            } else if (args.section_name.toLowerCase() === "system message") {
+              updatedPrompt.systemMessage = args.new_content;
+            }
+            
+            const afterAnalysis = this.semanticAnalyzer.analyzePrompt(updatedPrompt);
+            analysisComparison = this.comparePromptAnalyses(beforeAnalysis, afterAnalysis, args.id);
+          }
+
+          // Create enhanced response with analysis
+          let enhancedMessage = `${result.message}\n\n`;
+          if (analysisComparison) {
+            enhancedMessage += `${analysisComparison}\n`;
+          }
 
           if (args.fullServerRestart) {
             setTimeout(
@@ -724,7 +878,7 @@ export class PromptManagementTools {
               content: [
                 {
                   type: "text",
-                  text: `${result.message}\n\nFull server restart initiated...`,
+                  text: `${enhancedMessage}Full server restart initiated...`,
                 },
               ],
             };
@@ -734,7 +888,7 @@ export class PromptManagementTools {
               content: [
                 {
                   type: "text",
-                  text: `${result.message}\n\nChanges were hot-reloaded.`,
+                  text: `${enhancedMessage}Changes were hot-reloaded.`,
                 },
               ],
             };

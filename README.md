@@ -19,16 +19,19 @@ _Supercharge your AI workflows with battle-tested prompt engineering, intelligen
 
 </div>
 
-## 🌟 What Makes This Special?
+## 🌟 What Makes This Special? (v1.1.0 - "Intelligent Execution")
 
+- **🧠 Semantic Analysis Engine** → Automatically detects execution types without manual configuration
+- **🎯 Universal Prompt Execution** → Single tool with intelligent mode detection and auto-execution
+- **🛡️ Smart Quality Gates** → Auto-assigned validation based on prompt complexity and type
+- **🔄 Zero-Configuration Reliability** → No headers or manual setup required - just works intelligently
+- **📊 Learning Analytics** → System improves detection accuracy through usage patterns
 - **🔥 Intelligent Hot-Reload System** → Update prompts instantly without restarts
-- **🎯 Advanced Template Engine** → Nunjucks-powered with conditionals, loops, and dynamic data
+- **🎨 Advanced Template Engine** → Nunjucks-powered with conditionals, loops, and dynamic data
 - **⚡ Multi-Phase Orchestration** → Robust startup sequence with comprehensive health monitoring
 - **🚀 Universal MCP Compatibility** → Works flawlessly with Claude Desktop, Cursor Windsurf, and any MCP client
-- **🧠 Prompt Chain Workflows** → Build complex multi-step AI processes
-- **📊 Real-Time Diagnostics** → Performance metrics and health validation built-in
 
-Transform your AI assistant experience from scattered prompts to a **powerful, organized command library** that works across any MCP-compatible platform.
+Transform your AI assistant experience from scattered prompts to a **truly intelligent execution engine** that automatically understands and optimally executes any prompt across any MCP-compatible platform.
 
 ## 🚀 Revolutionary Interactive Prompt Management
 
@@ -48,17 +51,21 @@ This isn't just another prompt server – it's a **living, breathing prompt ecos
 # 🔍 Discover and iterate on your prompt library
 >>listprompts
 → Browse your growing collection, then ask: "Improve the research_assistant prompt to be more thorough"
+
+# 🧠 Execute prompts with zero configuration - system auto-detects everything
+>>content_analysis my content
+→ Automatic semantic analysis detects workflow type, applies quality gates, executes perfectly
 ```
 
 **🌟 Why This Changes Everything:**
 
-- **🔄 Self-Evolving System**: Your AI assistant literally builds and improves its own capabilities in real-time
-- **🎮 No Context Switching**: Never leave your AI conversation to manage prompts – everything happens inline
-- **🧠 Collaborative Intelligence**: You and your AI work together to craft the perfect prompt library
-- **⚡ Instant Gratification**: Create → Test → Refine → Deploy in seconds, not minutes
-- **🌱 Organic Growth**: Your prompt library naturally evolves based on your actual usage patterns
+- **🧠 True Intelligence**: System understands prompts like a human - no configuration needed
+- **🔄 Self-Evolving System**: Your AI assistant literally builds and improves its own capabilities in real-time  
+- **🎮 Zero Friction**: Never configure execution modes, quality gates, or headers - everything just works
+- **⚡ Instant Perfection**: Create → Auto-detect → Execute optimally in one seamless flow
+- **🌱 Learning System**: Detection accuracy improves through usage - gets smarter over time
 
-This is what **conversational AI infrastructure** looks like – where the boundary between using AI and building AI capabilities disappears entirely.
+This is what **truly intelligent AI infrastructure** looks like – where the system understands intent as naturally as reading human language.
 
 ## ⚡ Features & Reliability
 
@@ -92,10 +99,13 @@ This is what **conversational AI infrastructure** looks like – where the bound
 <tr>
 <td colspan="2">
 
-**🛠️ Complete Interactive MCP Tools Suite**
+**🛠️ Enhanced MCP Tools Suite (v1.1.0)**
 
-- 🎮 **Process Slash Commands** → `/prompt_name` syntax for instant prompt execution
-- 📋 **List Prompts** → `/listprompts` to discover all available commands with usage examples
+- 🎯 **Universal Prompt Execution** → `execute_prompt` tool with automatic mode detection and gate validation
+- 🛡️ **Quality Assurance Gates** → Automatic content validation with intelligent retry mechanisms
+- 📊 **Execution Analytics** → `execution_analytics` tool for performance monitoring and insights
+- 🔄 **Step-by-Step Chain Execution** → Optional confirmation between chain steps for quality control
+- 📋 **List Prompts** → `listprompts` to discover all available commands with enhanced usage examples
 - ✏️ **Update Prompts** → Modify existing prompts through conversation with full validation and hot-reload
 - 🗑️ **Delete Prompts** → Remove prompts by asking your AI assistant - automatic file cleanup included
 - 🔧 **Modify Sections** → "Edit the description of my research prompt" → Done instantly
@@ -148,32 +158,43 @@ Configure your MCP client to connect via STDIO transport:
 
 > 💡 **Pro Tip**: Use absolute paths for bulletproof integration across all MCP clients!
 
-### 🎮 **Start Building Immediately**
+### 🎮 **Start Building Immediately (v1.1.0 Enhanced)**
 
-Your AI command arsenal is ready, and it grows **through conversation**:
+Your AI command arsenal is ready with **enhanced reliability**:
 
 ```bash
-# Discover your new superpowers
+# 🧠 Discover your intelligent superpowers
 >>listprompts
 
-# Execute lightning-fast prompts
+# 🎯 Zero-config intelligent execution - system auto-detects everything
 >>friendly_greeting name="Developer"
+→ Auto-detected as template, returns personalized greeting
 
-# 🚀 NEW: Create prompts by talking to your AI
-"Create a prompt called 'bug_analyzer' that helps me debug code issues systematically"
-→ Your AI creates, tests, and registers the prompt instantly!
+>>content_analysis my research data
+→ Auto-detected as workflow, applies quality gates, executes analysis framework
 
-# 🔄 Refine prompts through conversation
+>>notes my content
+→ Auto-detected as chain, validates each step, executes sequence
+
+# 📊 Monitor intelligent detection performance
+>>execution_analytics {"include_history": true}
+→ See how accurately the system detects prompt types and applies gates
+
+# 🚀 Create prompts that just work (zero configuration)
+"Create a prompt called 'bug_analyzer' that finds and explains code issues"
+→ AI creates prompt, system auto-detects workflow type, assigns quality gates
+
+# 🔄 Refine prompts through conversation (intelligence improves)
 "Make the bug_analyzer prompt also suggest performance improvements"
-→ Prompt updated and hot-reloaded automatically
+→ Prompt updated, system re-analyzes, updates detection profile automatically
 
-# Handle complex scenarios with JSON
->>research_prompt {"topic": "AI trends", "depth": "comprehensive", "format": "executive summary"}
+# 🧠 Build intelligent AI workflows
+"Create a prompt chain that reviews code, validates output, tests it, then documents it"
+→ Chain created, each step auto-analyzed, appropriate gates assigned automatically
 
-# 🧠 Build your custom AI toolkit naturally
-"I need a prompt for writing technical documentation"
-→ "The bug_analyzer needs to also check for security issues"
-→ "Create a prompt chain that reviews code, tests it, then documents it"
+# 🎛️ Manual override when needed (but rarely necessary)
+>>execute_prompt {"command": ">>content_analysis data", "step_confirmation": true}
+→ Force step confirmation for sensitive analysis
 ```
 
 **🌟 The Magic**: Your prompt library becomes a **living extension of your workflow**, growing and adapting as you work with your AI assistant.

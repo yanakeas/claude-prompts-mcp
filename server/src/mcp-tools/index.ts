@@ -12,6 +12,9 @@ import {
   ConvertedPrompt,
   PromptData,
   ToolResponse,
+  ExecutionMode,
+  ExecutionState,
+  GateDefinition,
 } from "../types/index.js";
 import {
   PromptError,
@@ -19,6 +22,8 @@ import {
   validateJsonArguments,
   ValidationError,
 } from "../utils/index.js";
+import { createGateEvaluator, GateEvaluator } from "../utils/gateValidation.js";
+import { SemanticAnalyzer, PromptClassification } from "../utils/semanticAnalyzer.js";
 import { PromptManagementTools } from "./prompt-management-tools.js";
 
 /**
@@ -30,9 +35,34 @@ export class McpToolsManager {
   private promptManager: PromptManager;
   private configManager: ConfigManager;
   private promptManagementTools: PromptManagementTools;
+  private gateEvaluator: GateEvaluator;
+  private semanticAnalyzer: SemanticAnalyzer;
   private promptsData: PromptData[] = [];
   private convertedPrompts: ConvertedPrompt[] = [];
   private categories: Category[] = [];
+  private currentExecutionState: ExecutionState | null = null;
+  private executionHistory: ExecutionState[] = [];
+  private executionAnalytics = {
+    totalExecutions: 0,
+    successfulExecutions: 0,
+    failedExecutions: 0,
+    retriedExecutions: 0,
+    gateValidationCount: 0,
+    averageExecutionTime: 0,
+    executionsByMode: {
+      auto: 0,
+      template: 0,
+      chain: 0,
+      workflow: 0,
+    },
+    classificationHistory: {} as Record<string, {
+      classification: PromptClassification;
+      timestamp: number;
+      confidence: number;
+    }>,
+    learningData: [] as any[],
+    confidenceTrends: {} as Record<string, Array<{confidence: number; timestamp: number}>>
+  };
 
   constructor(
     logger: Logger,
@@ -46,6 +76,8 @@ export class McpToolsManager {
     this.mcpServer = mcpServer;
     this.promptManager = promptManager;
     this.configManager = configManager;
+    this.gateEvaluator = createGateEvaluator(logger);
+    this.semanticAnalyzer = new SemanticAnalyzer();
     this.promptManagementTools = new PromptManagementTools(
       logger,
       mcpServer,
@@ -62,12 +94,18 @@ export class McpToolsManager {
     this.logger.info("Registering MCP tools with server...");
 
     // Register each tool
-    this.registerProcessSlashCommand();
+    this.registerExecutePrompt();
     this.registerListPrompts();
     this.promptManagementTools.registerUpdatePrompt();
     this.promptManagementTools.registerDeletePrompt();
     this.promptManagementTools.registerModifyPromptSection();
     this.promptManagementTools.registerReloadPrompts();
+
+    // Also register the old name as an alias for backward compatibility
+    this.registerProcessSlashCommandAlias();
+
+    // Register analytics tool
+    this.registerExecutionAnalytics();
 
     this.logger.info("All MCP tools registered successfully");
   }
@@ -87,22 +125,50 @@ export class McpToolsManager {
   }
 
   /**
-   * Register process_slash_command tool
+   * Register execute_prompt tool (enhanced version of process_slash_command)
    */
-  private registerProcessSlashCommand(): void {
+  private registerExecutePrompt(): void {
     this.mcpServer.tool(
-      "process_slash_command",
-      "Process commands that trigger prompt templates with optional arguments",
+      "execute_prompt",
+      "🧠 INTELLIGENT PROMPT EXECUTION: Just provide your content and let smart defaults handle everything! Auto-detects prompt types, applies quality gates, and optimizes execution. Simple usage: >>prompt_name your_content_here",
       {
         command: z
           .string()
           .describe(
-            "The command to process, e.g., '>>content_analysis Hello world' or '/content_analysis Hello world'"
+            "SIMPLE: >>prompt_name your_content_here (intelligent defaults handle everything) | ADVANCED: JSON format for custom control. Smart auto-detection optimizes execution type, quality gates, and validation automatically."
+          ),
+        execution_mode: z
+          .enum(["auto", "template", "chain", "workflow"])
+          .optional()
+          .describe(
+            "OPTIONAL: Override intelligent auto-detection. 'auto' (smart defaults), 'template' (info only), 'chain' (step-by-step), 'workflow' (full validation). Usually not needed - smart defaults work great!"
+          ),
+        gate_validation: z
+          .boolean()
+          .optional()
+          .describe(
+            "OPTIONAL: Force quality validation on/off. Smart defaults automatically apply appropriate gates based on prompt complexity. Usually auto-detection is perfect!"
+          ),
+        step_confirmation: z
+          .boolean()
+          .optional()
+          .describe(
+            "OPTIONAL: Pause between chain steps for manual approval. Only needed for sensitive workflows - smart execution usually handles everything smoothly!"
           ),
       },
-      async ({ command }: { command: string }, extra: any) => {
+      async ({ 
+        command, 
+        execution_mode = "auto", 
+        gate_validation, 
+        step_confirmation = false 
+      }: { 
+        command: string; 
+        execution_mode?: "auto" | "template" | "chain" | "workflow";
+        gate_validation?: boolean;
+        step_confirmation?: boolean;
+      }, extra: any) => {
         try {
-          this.logger.info(`Processing command: ${command}`);
+          this.logger.info(`Executing prompt command: ${command} (mode: ${execution_mode})`);
 
           // Extract the command name and arguments
           const match = command.match(/^(>>|\/)([a-zA-Z0-9_-]+)\s*(.*)/);
@@ -138,42 +204,34 @@ export class McpToolsManager {
             );
           }
 
-          // Check if commandArgs is empty and how to handle it
+          // Auto-detect execution mode if set to "auto"
+          let effectiveExecutionMode = execution_mode;
+          if (execution_mode === "auto") {
+            effectiveExecutionMode = this.detectExecutionMode(convertedPrompt);
+          }
+
+          // Determine gate validation setting
+          let effectiveGateValidation = gate_validation;
+          if (effectiveGateValidation === undefined) {
+            // Default to true for chains/workflows, false for single prompts
+            effectiveGateValidation = effectiveExecutionMode === "chain" || effectiveExecutionMode === "workflow";
+          }
+
+          this.logger.debug(`Effective execution mode: ${effectiveExecutionMode}, gate validation: ${effectiveGateValidation}`);
+
+          // Check if we should return template info instead of executing
           const trimmedCommandArgs = commandArgs.trim();
 
           if (
-            trimmedCommandArgs === "" &&
-            convertedPrompt.onEmptyInvocation === "return_template"
+            effectiveExecutionMode === "template" ||
+            (trimmedCommandArgs === "" &&
+              convertedPrompt.onEmptyInvocation === "return_template")
           ) {
             this.logger.info(
-              `Command '${prefix}${commandName}' invoked without arguments and onEmptyInvocation is 'return_template'. Returning template info.`
+              `Returning template info for '${prefix}${commandName}' (mode: ${effectiveExecutionMode})`
             );
 
-            let responseText = `Prompt: '${convertedPrompt.name}' (ID: ${convertedPrompt.id})\n`;
-            responseText += `Description: ${convertedPrompt.description}\n`;
-
-            if (
-              convertedPrompt.arguments &&
-              convertedPrompt.arguments.length > 0
-            ) {
-              responseText += `This prompt requires the following arguments:\n`;
-              convertedPrompt.arguments.forEach((arg) => {
-                responseText += `  - ${arg.name}${
-                  arg.required ? " (required)" : " (optional)"
-                }: ${arg.description || "No description"}\n`;
-              });
-              responseText += `\nExample usage: ${prefix}${
-                convertedPrompt.id || convertedPrompt.name
-              } ${convertedPrompt.arguments
-                .map((arg) => `${arg.name}=\"value\"`)
-                .join(" ")}`;
-            } else {
-              responseText += "This prompt does not require any arguments.\n";
-            }
-            return {
-              content: [{ type: "text" as const, text: responseText }],
-              isError: false,
-            };
+            return this.generateTemplateInfo(convertedPrompt, prefix);
           }
 
           // Parse arguments if commandArgs is not empty, or if it's empty but onEmptyInvocation is 'execute_if_possible'
@@ -199,16 +257,56 @@ export class McpToolsManager {
             }
           });
 
-          // Handle chain prompts differently
-          if (convertedPrompt.isChain) {
-            return this.handleChainPrompt(convertedPrompt);
-          }
+          // Create execution state
+          this.currentExecutionState = {
+            type: convertedPrompt.isChain ? 'chain' : 'single',
+            promptId: convertedPrompt.id,
+            status: 'pending',
+            gates: [],
+            results: {},
+            metadata: {
+              startTime: Date.now(),
+              executionMode: effectiveExecutionMode,
+              stepConfirmation: step_confirmation,
+              gateValidation: effectiveGateValidation,
+            },
+          };
 
-          // Process regular prompt
-          return await this.processRegularPrompt(
-            convertedPrompt,
-            promptArgValues
-          );
+          // Handle different execution modes
+          switch (effectiveExecutionMode) {
+            case "chain":
+              if (convertedPrompt.isChain) {
+                return await this.executeChainWithGates(
+                  convertedPrompt,
+                  promptArgValues,
+                  effectiveGateValidation,
+                  step_confirmation
+                );
+              } else {
+                throw new ValidationError(
+                  `Prompt '${commandName}' is not a chain but was requested to execute as chain`
+                );
+              }
+
+            case "workflow":
+              return await this.executeWorkflowWithGates(
+                convertedPrompt,
+                promptArgValues,
+                step_confirmation
+              );
+
+            default: // "auto" falls through to regular processing
+              if (convertedPrompt.isChain) {
+                return this.handleChainPrompt(convertedPrompt);
+              }
+
+              // Process regular prompt with optional gate validation
+              return await this.processRegularPromptWithGates(
+                convertedPrompt,
+                promptArgValues,
+                effectiveGateValidation
+              );
+          }
         } catch (error) {
           const { message, isError } = this.handleError(
             error,
@@ -237,54 +335,121 @@ export class McpToolsManager {
       this.logger.warn(
         `Command '${prefix}${commandName}' doesn't accept arguments, but arguments were provided: ${commandArgs}`
       );
-    } else if (
-      matchingPrompt.arguments.length === 1 &&
-      (!commandArgs.trim().startsWith("{") || !commandArgs.trim().endsWith("}"))
-    ) {
-      // Single argument, not in JSON format
-      promptArgValues[matchingPrompt.arguments[0].name] = commandArgs.trim();
-    } else {
-      try {
-        if (
-          commandArgs.trim().startsWith("{") &&
-          commandArgs.trim().endsWith("}")
-        ) {
-          const parsedArgs = JSON.parse(commandArgs);
-          const validation = validateJsonArguments(parsedArgs, matchingPrompt);
+      return;
+    }
 
-          if (!validation.valid && validation.errors) {
-            this.logger.warn(
-              `Invalid arguments for ${prefix}${commandName}: ${validation.errors.join(
-                ", "
-              )}. Using previous message instead.`
-            );
-            matchingPrompt.arguments.forEach((arg) => {
-              promptArgValues[arg.name] = `{{previous_message}}`;
-            });
-          } else {
-            Object.assign(promptArgValues, validation.sanitizedArgs || {});
-          }
-        } else if (matchingPrompt.arguments.length === 1) {
-          promptArgValues[matchingPrompt.arguments[0].name] = commandArgs;
-        } else {
+    const trimmedArgs = commandArgs.trim();
+    
+    // Check if it's JSON format
+    const isJsonFormat = trimmedArgs.startsWith("{") && trimmedArgs.endsWith("}");
+    
+    if (isJsonFormat) {
+      // Handle JSON format (advanced usage)
+      try {
+        const parsedArgs = JSON.parse(trimmedArgs);
+        const validation = validateJsonArguments(parsedArgs, matchingPrompt);
+
+        if (!validation.valid && validation.errors) {
           this.logger.warn(
-            `Multi-argument prompt requested (${matchingPrompt.arguments.length} args). Command arguments not in JSON format. Using previous message instead.`
+            `Invalid JSON arguments for ${prefix}${commandName}: ${validation.errors.join(
+              ", "
+            )}. Using intelligent defaults.`
           );
-          matchingPrompt.arguments.forEach((arg) => {
-            promptArgValues[arg.name] = `{{previous_message}}`;
-          });
+          this.applyIntelligentDefaults(matchingPrompt, promptArgValues, trimmedArgs);
+        } else {
+          Object.assign(promptArgValues, validation.sanitizedArgs || {});
         }
       } catch (e) {
         this.logger.warn(
-          `Error parsing arguments for ${prefix}${commandName}: ${
+          `Error parsing JSON arguments for ${prefix}${commandName}: ${
             e instanceof Error ? e.message : String(e)
-          }. Using previous message instead.`
+          }. Using intelligent defaults.`
         );
-        matchingPrompt.arguments.forEach((arg) => {
-          promptArgValues[arg.name] = `{{previous_message}}`;
-        });
+        this.applyIntelligentDefaults(matchingPrompt, promptArgValues, trimmedArgs);
+      }
+    } else {
+      // Handle simple text format (quick start usage)
+      if (matchingPrompt.arguments.length === 1) {
+        // Single argument - direct assignment
+        promptArgValues[matchingPrompt.arguments[0].name] = trimmedArgs;
+      } else if (matchingPrompt.arguments.length <= 3) {
+        // For 2-3 arguments, try to parse intelligently
+        this.parseSimpleTextArguments(matchingPrompt, promptArgValues, trimmedArgs);
+      } else {
+        // For complex prompts (4+ args), use the first argument or primary content field
+        this.applyIntelligentDefaults(matchingPrompt, promptArgValues, trimmedArgs);
       }
     }
+  }
+
+  /**
+   * Parse simple text arguments for prompts with 2-3 parameters
+   */
+  private parseSimpleTextArguments(
+    matchingPrompt: PromptData,
+    promptArgValues: Record<string, string>,
+    content: string
+  ): void {
+    // Try to intelligently split content for multiple arguments
+    // Look for natural separators or use the whole content for the main argument
+    const args = matchingPrompt.arguments;
+    
+    // Find the most likely "content" or "main" argument
+    const contentArg = args.find(arg => 
+      arg.name.toLowerCase().includes('content') ||
+      arg.name.toLowerCase().includes('text') ||
+      arg.name.toLowerCase().includes('input') ||
+      arg.name.toLowerCase().includes('data') ||
+      arg.name.toLowerCase().includes('message')
+    ) || args[0]; // Default to first argument
+
+    // Assign the content to the main argument
+    promptArgValues[contentArg.name] = content;
+    
+    // Fill remaining arguments with intelligent defaults
+    args.forEach(arg => {
+      if (arg.name !== contentArg.name && !promptArgValues[arg.name]) {
+        promptArgValues[arg.name] = `{{previous_message}}`;
+      }
+    });
+  }
+
+  /**
+   * Apply intelligent defaults when parsing fails or for complex prompts
+   */
+  private applyIntelligentDefaults(
+    matchingPrompt: PromptData,
+    promptArgValues: Record<string, string>,
+    userContent: string
+  ): void {
+    // Find the most appropriate argument for user content
+    const args = matchingPrompt.arguments;
+    
+    // Priority order for content assignment
+    const contentPriority = ['content', 'text', 'input', 'data', 'message', 'query', 'prompt'];
+    
+    let targetArg = null;
+    for (const priority of contentPriority) {
+      targetArg = args.find(arg => arg.name.toLowerCase().includes(priority));
+      if (targetArg) break;
+    }
+    
+    // If no priority match, use the first argument
+    if (!targetArg) {
+      targetArg = args[0];
+    }
+    
+    // Assign user content to the target argument
+    if (targetArg) {
+      promptArgValues[targetArg.name] = userContent;
+    }
+    
+    // Fill remaining arguments with placeholders
+    args.forEach(arg => {
+      if (!promptArgValues[arg.name]) {
+        promptArgValues[arg.name] = `{{previous_message}}`;
+      }
+    });
   }
 
   /**
@@ -341,6 +506,872 @@ export class McpToolsManager {
   }
 
   /**
+   * Process regular prompt with optional gate validation
+   */
+  private async processRegularPromptWithGates(
+    convertedPrompt: ConvertedPrompt,
+    promptArgValues: Record<string, string>,
+    enableGates: boolean
+  ): Promise<ToolResponse> {
+    if (!this.currentExecutionState) {
+      throw new PromptError("No execution state available");
+    }
+
+    this.currentExecutionState.status = 'running';
+    
+    // Generate the prompt content
+    let userMessageText = convertedPrompt.userMessageTemplate;
+
+    // Add system message if present
+    if (convertedPrompt.systemMessage) {
+      userMessageText = `[System Info: ${convertedPrompt.systemMessage}]\n\n${userMessageText}`;
+    }
+
+    // Process the template to replace all placeholders
+    userMessageText = await this.promptManager.processTemplateAsync(
+      userMessageText,
+      promptArgValues,
+      { previous_message: "{{previous_message}}" },
+      convertedPrompt.tools || false
+    );
+
+    // Apply gate validation if enabled and gates are defined (manual or auto-assigned)
+    const gatesToEvaluate = [
+      ...(convertedPrompt.gates || []),
+      ...((convertedPrompt as any).autoAssignedGates || [])
+    ];
+    
+    if (enableGates && gatesToEvaluate.length > 0) {
+      this.logger.debug(`Evaluating ${gatesToEvaluate.length} gates for ${convertedPrompt.id}:`, 
+        gatesToEvaluate.map(g => g.name));
+      
+      const gateStatuses = await this.gateEvaluator.evaluateGates(
+        userMessageText,
+        gatesToEvaluate
+      );
+
+      this.currentExecutionState.gates = gateStatuses;
+
+      const failedGates = gateStatuses.filter(gate => !gate.passed);
+      if (failedGates.length > 0) {
+        // Check if retry is possible
+        const shouldRetry = this.gateEvaluator.shouldRetry(gateStatuses, 3);
+        
+        if (shouldRetry) {
+          this.currentExecutionState.status = 'retrying';
+          
+          // Increment retry count for failed gates
+          failedGates.forEach(gate => {
+            gate.retryCount = (gate.retryCount || 0) + 1;
+          });
+          
+          const retryMessage = this.gateEvaluator.getRetryMessage(gateStatuses);
+          const retryInstructions = this.generateRetryInstructions(failedGates, convertedPrompt);
+          
+          return {
+            content: [{ 
+              type: "text", 
+              text: `🔄 **RETRY OPPORTUNITY**: Gate validation failed but retry is possible\n\n${retryMessage}\n\n${retryInstructions}\n\n📝 **Generated content (for review)**:\n${userMessageText}` 
+            }],
+            isError: false,
+          };
+        } else {
+          this.currentExecutionState.status = 'failed';
+          const retryMessage = this.gateEvaluator.getRetryMessage(gateStatuses);
+          
+          return {
+            content: [{ 
+              type: "text", 
+              text: `❌ **GATE VALIDATION FAILED**: Maximum retries exceeded\n\n${retryMessage}\n\n📝 **Final generated content**:\n${userMessageText}` 
+            }],
+            isError: true,
+          };
+        }
+      }
+    }
+
+    this.currentExecutionState.status = 'completed';
+    this.currentExecutionState.metadata.endTime = Date.now();
+    this.currentExecutionState.results['output'] = userMessageText;
+
+    // Update analytics
+    this.updateExecutionAnalytics(this.currentExecutionState);
+
+    // Add execution metadata to the response
+    const executionInfo = enableGates && convertedPrompt.gates?.length 
+      ? `\n\n✅ Executed with gate validation (${convertedPrompt.gates.length} gates passed)`
+      : "";
+
+    return {
+      content: [{ type: "text", text: userMessageText + executionInfo }],
+    };
+  }
+
+  /**
+   * Execute chain with gate validation
+   */
+  private async executeChainWithGates(
+    convertedPrompt: ConvertedPrompt,
+    promptArgValues: Record<string, string>,
+    enableGates: boolean,
+    stepConfirmation: boolean
+  ): Promise<ToolResponse> {
+    const chainSteps = convertedPrompt.chainSteps || [];
+
+    if (!this.currentExecutionState) {
+      throw new PromptError("No execution state available");
+    }
+
+    this.currentExecutionState.status = 'running';
+    this.currentExecutionState.type = 'chain';
+    this.currentExecutionState.totalSteps = chainSteps.length;
+
+    const chainExplanation = [
+      `🔄 **ENHANCED CHAIN EXECUTION**: ${convertedPrompt.name} (${convertedPrompt.id})`,
+      ``,
+      `This chain consists of ${chainSteps.length} steps with ${enableGates ? 'GATE VALIDATION' : 'no validation'}:`,
+      ``,
+      ...chainSteps.map(
+        (step: any, index: number) =>
+          `${index + 1}. **${step.stepName}** (${step.promptId})`
+      ),
+      ``,
+      `⚡ **EXECUTION INSTRUCTIONS**: ${stepConfirmation ? 'STEP-BY-STEP CONFIRMATION MODE' : 'SEQUENTIAL EXECUTION'}`,
+    ];
+
+    if (stepConfirmation) {
+      // Step-by-step confirmation mode
+      chainExplanation.push(
+        ``,
+        `✋ **STEP CONFIRMATION ENABLED**: Execute one step at a time and wait for confirmation`,
+        ``,
+        `**🚀 STEP 1**: Start with:`,
+        `\`\`\`json`,
+        JSON.stringify({
+          command: `>>${chainSteps[0].promptId} [your_arguments]`,
+          execution_mode: "workflow",
+          gate_validation: enableGates,
+          step_confirmation: true
+        }, null, 2),
+        `\`\`\``,
+        ``,
+        `After completing Step 1, I will:`,
+        `- ✅ Validate the output against quality gates`,
+        `- 📊 Show progress status (1/${chainSteps.length} completed)`,
+        `- 🔄 Provide instructions for Step 2`,
+        `- ⏸️ Wait for your confirmation to proceed`,
+        ``,
+        `**Benefits of Step Confirmation**:`,
+        `- 🔍 Review and validate each step's output`,
+        `- 🛠️ Make adjustments before proceeding`,
+        `- 🚫 Stop the chain if issues are detected`,
+        `- 📈 Track progress with detailed feedback`
+      );
+    } else {
+      // Sequential execution mode
+      chainExplanation.push(
+        ``,
+        `**Execute all steps in sequence:**`,
+        ...chainSteps.map(
+          (step: any, index: number) =>
+            `${index + 1}. \`>>execute_prompt {"command": ">>${step.promptId} [arguments]", "execution_mode": "workflow", "gate_validation": ${enableGates}}\``
+        )
+      );
+    }
+
+    chainExplanation.push(
+      ``,
+      enableGates ? `🛡️ **Gate Validation**: Each step will be validated before proceeding` : '',
+      `🔗 **Chain Context**: Each step builds upon previous results`,
+      `📊 **Progress Tracking**: Execution state will be monitored throughout`,
+    );
+
+    // Update execution state
+    this.currentExecutionState.currentStep = 0;
+    this.currentExecutionState.metadata.stepConfirmation = stepConfirmation;
+    this.currentExecutionState.metadata.gateValidation = enableGates;
+
+    return {
+      content: [{ type: "text", text: chainExplanation.filter(line => line !== '').join("\n") }],
+    };
+  }
+
+  /**
+   * Execute workflow with full gate validation
+   */
+  private async executeWorkflowWithGates(
+    convertedPrompt: ConvertedPrompt,
+    promptArgValues: Record<string, string>,
+    stepConfirmation: boolean
+  ): Promise<ToolResponse> {
+    if (!this.currentExecutionState) {
+      throw new PromptError("No execution state available");
+    }
+
+    this.currentExecutionState.status = 'running';
+    this.currentExecutionState.type = 'workflow';
+
+    // Generate the workflow instructions
+    let workflowText = convertedPrompt.userMessageTemplate;
+
+    // Add system message if present
+    if (convertedPrompt.systemMessage) {
+      workflowText = `[System Info: ${convertedPrompt.systemMessage}]\n\n${workflowText}`;
+    }
+
+    // Process the template
+    workflowText = await this.promptManager.processTemplateAsync(
+      workflowText,
+      promptArgValues,
+      { previous_message: "{{previous_message}}" },
+      convertedPrompt.tools || false
+    );
+
+    // Add workflow execution header
+    const workflowHeader = [
+      `🎯 **WORKFLOW EXECUTION REQUIRED**`,
+      `📋 **Prompt**: ${convertedPrompt.name}`,
+      `⚡ **Auto-Execution**: This workflow will be executed step-by-step with validation`,
+      `🔄 **Progress Tracking**: Each step will be validated before proceeding`,
+      stepConfirmation ? `✋ **Manual Confirmation**: Confirmation required between steps` : '',
+      ``,
+    ].filter(line => line !== '').join("\n");
+
+    const fullWorkflowText = workflowHeader + workflowText;
+
+    this.currentExecutionState.status = 'completed';
+    this.currentExecutionState.metadata.endTime = Date.now();
+    this.currentExecutionState.results['workflow'] = fullWorkflowText;
+
+    return {
+      content: [{ type: "text", text: fullWorkflowText }],
+    };
+  }
+
+  /**
+   * Detect execution mode using intelligent semantic analysis
+   */
+  private detectExecutionMode(convertedPrompt: ConvertedPrompt): "auto" | "template" | "chain" | "workflow" {
+    // Check for explicit execution mode in prompt (highest priority)
+    if (convertedPrompt.executionMode) {
+      this.logger.debug(`Explicit execution mode specified: ${convertedPrompt.executionMode}`);
+      return convertedPrompt.executionMode;
+    }
+
+    // Use semantic analysis for intelligent detection
+    const classification = this.semanticAnalyzer.analyzePrompt(convertedPrompt);
+    
+    // Auto-assign quality gates based on analysis
+    this.autoAssignQualityGates(convertedPrompt, classification);
+    
+    // Log the analysis for debugging
+    this.logger.debug(`Semantic analysis for ${convertedPrompt.id}:`, {
+      executionType: classification.executionType,
+      confidence: classification.confidence,
+      requiresExecution: classification.requiresExecution,
+      reasoning: classification.reasoning,
+      suggestedGates: classification.suggestedGates
+    });
+
+    // Store classification for analytics and future improvements
+    this.storeClassificationAnalytics(convertedPrompt.id, classification);
+
+    return classification.executionType;
+  }
+
+  /**
+   * Auto-assign quality gates based on semantic analysis
+   */
+  private autoAssignQualityGates(prompt: ConvertedPrompt, classification: PromptClassification): void {
+    // Create intelligent gate definitions based on classification
+    const autoGates: GateDefinition[] = [];
+    
+    // Always apply basic validation for workflows
+    if (classification.requiresExecution && classification.confidence > 0.5) {
+      autoGates.push({
+        id: "basic_content_validation",
+        name: "Basic Content Validation",
+        type: "validation",
+        requirements: [
+          {
+            type: "content_length",
+            criteria: { min: 50 },
+            required: true
+          }
+        ],
+        failureAction: "retry"
+      });
+    }
+
+    // Add complexity-based gates for high-confidence workflows
+    if (classification.executionType === "workflow" && classification.confidence > 0.7) {
+      // Add keyword presence validation for analysis prompts
+      if (classification.reasoning.some(r => r.includes("analysis"))) {
+        autoGates.push({
+          id: "analysis_quality_gate",
+          name: "Analysis Quality Gate",
+          type: "quality",
+          requirements: [
+            {
+              type: "keyword_presence",
+              criteria: { keywords: ["analysis", "findings", "conclusion"] },
+              required: false,
+              weight: 0.7
+            },
+            {
+              type: "content_length",
+              criteria: { min: 200 },
+              required: true
+            }
+          ],
+          failureAction: "retry"
+        });
+      }
+      
+      // Add structured format validation for complex prompts
+      if (prompt.arguments.length > 2) {
+        autoGates.push({
+          id: "structured_format_gate",
+          name: "Structured Format Gate", 
+          type: "validation",
+          requirements: [
+            {
+              type: "format_validation",
+              criteria: { format: "structured" },
+              required: true
+            }
+          ],
+          failureAction: "retry"
+        });
+      }
+    }
+
+    // Add chain-specific gates
+    if (classification.executionType === "chain") {
+      autoGates.push({
+        id: "chain_completion_gate",
+        name: "Chain Step Completion Gate",
+        type: "validation", 
+        requirements: [
+          {
+            type: "content_length",
+            criteria: { min: 100 },
+            required: true
+          }
+        ],
+        failureAction: "retry"
+      });
+    }
+
+    // Store the auto-assigned gates in the prompt for execution use
+    if (autoGates.length > 0) {
+      (prompt as any).autoAssignedGates = autoGates;
+      this.logger.debug(`Auto-assigned ${autoGates.length} quality gates for ${prompt.id}:`, 
+        autoGates.map(g => g.name));
+    }
+  }
+
+  /**
+   * Store classification analytics for learning and improvement
+   */
+  private storeClassificationAnalytics(promptId: string, classification: PromptClassification): void {
+    // Store classification data for future analysis and improvement
+    if (!this.executionAnalytics.classificationHistory) {
+      this.executionAnalytics.classificationHistory = {};
+    }
+    
+    this.executionAnalytics.classificationHistory[promptId] = {
+      classification,
+      timestamp: Date.now(),
+      confidence: classification.confidence
+    };
+
+    // Learning feedback: adjust confidence based on execution success
+    this.improveDetectionAccuracy(promptId, classification);
+  }
+
+  /**
+   * Improve detection accuracy through learning feedback
+   */
+  private improveDetectionAccuracy(promptId: string, classification: PromptClassification): void {
+    // Basic learning system - can be expanded with ML models
+    const history = this.executionAnalytics.classificationHistory[promptId];
+    
+    if (history) {
+      // If we've seen this prompt before, compare classifications
+      const previousClassification = history.classification;
+      
+      if (previousClassification.executionType !== classification.executionType) {
+        // Classification changed - could indicate learning opportunity
+        this.logger.debug(`Classification changed for ${promptId}: ${previousClassification.executionType} → ${classification.executionType}`);
+        
+        // Future enhancement: adjust semantic patterns based on successful executions
+        this.logLearningOpportunity(promptId, previousClassification, classification);
+      }
+    }
+
+    // Track confidence trends for future model training
+    this.trackConfidenceTrends(promptId, classification.confidence);
+  }
+
+  /**
+   * Log learning opportunities for future model improvements
+   */
+  private logLearningOpportunity(promptId: string, previous: PromptClassification, current: PromptClassification): void {
+    const learningData = {
+      promptId,
+      timestamp: Date.now(),
+      previousClassification: {
+        type: previous.executionType,
+        confidence: previous.confidence,
+        reasoning: previous.reasoning
+      },
+      newClassification: {
+        type: current.executionType,
+        confidence: current.confidence,
+        reasoning: current.reasoning
+      },
+      changeReason: "Re-analysis with improved patterns"
+    };
+
+    // Store for future ML model training
+    if (!this.executionAnalytics.learningData) {
+      this.executionAnalytics.learningData = [];
+    }
+    
+    this.executionAnalytics.learningData.push(learningData);
+    
+    // Keep only last 100 learning entries
+    if (this.executionAnalytics.learningData.length > 100) {
+      this.executionAnalytics.learningData.shift();
+    }
+
+    this.logger.info(`Learning opportunity logged for ${promptId}: classification accuracy improvement potential detected`);
+  }
+
+  /**
+   * Track confidence trends for pattern optimization
+   */
+  private trackConfidenceTrends(promptId: string, confidence: number): void {
+    if (!this.executionAnalytics.confidenceTrends) {
+      this.executionAnalytics.confidenceTrends = {};
+    }
+
+    if (!this.executionAnalytics.confidenceTrends[promptId]) {
+      this.executionAnalytics.confidenceTrends[promptId] = [];
+    }
+
+    this.executionAnalytics.confidenceTrends[promptId].push({
+      confidence,
+      timestamp: Date.now()
+    });
+
+    // Keep only last 10 confidence measurements per prompt
+    if (this.executionAnalytics.confidenceTrends[promptId].length > 10) {
+      this.executionAnalytics.confidenceTrends[promptId].shift();
+    }
+  }
+
+  /**
+   * Generate template information response
+   */
+  private generateTemplateInfo(convertedPrompt: ConvertedPrompt, prefix: string): ToolResponse {
+    let responseText = `📋 **Template Info**: '${convertedPrompt.name}' (ID: ${convertedPrompt.id})\n\n`;
+    responseText += `**Description**: ${convertedPrompt.description}\n\n`;
+
+    // Get semantic analysis
+    const classification = this.semanticAnalyzer.analyzePrompt(convertedPrompt);
+    
+    // Add intelligent analysis information
+    responseText += `🧠 **Intelligent Analysis**:\n`;
+    responseText += `  - **Detected Type**: ${classification.executionType} (${Math.round(classification.confidence * 100)}% confidence)\n`;
+    responseText += `  - **Requires Execution**: ${classification.requiresExecution ? 'Yes' : 'No'}\n`;
+    
+    if (classification.suggestedGates.length > 0) {
+      responseText += `  - **Suggested Quality Gates**: ${classification.suggestedGates.join(', ')}\n`;
+    }
+    
+    responseText += `\n`;
+
+    // Add usage recommendation
+    if (classification.requiresExecution) {
+      responseText += `💡 **Recommended Usage**: \`${prefix}${convertedPrompt.id} <arguments>\` (will auto-execute)\n\n`;
+    } else {
+      responseText += `💡 **Usage**: \`${prefix}${convertedPrompt.id}\` (returns template information)\n\n`;
+    }
+
+    if (convertedPrompt.arguments && convertedPrompt.arguments.length > 0) {
+      responseText += `**Arguments**:\n`;
+      convertedPrompt.arguments.forEach((arg) => {
+        responseText += `  - \`${arg.name}\`${
+          arg.required ? " (required)" : " (optional)"
+        }: ${arg.description || "No description"}\n`;
+      });
+
+      responseText += `\n**🚀 Quick Start**:\n`;
+      
+      if (convertedPrompt.arguments.length === 1) {
+        const argName = convertedPrompt.arguments[0].name;
+        responseText += `\`${prefix}${convertedPrompt.id} your ${argName} here\`\n\n`;
+      } else if (convertedPrompt.arguments.length <= 3) {
+        // For simple prompts, show text format
+        const simpleArgs = convertedPrompt.arguments.map(arg => `<${arg.name}>`).join(' ');
+        responseText += `\`${prefix}${convertedPrompt.id} ${simpleArgs}\`\n\n`;
+      } else {
+        // For complex prompts, still show simple format but mention JSON option
+        responseText += `\`${prefix}${convertedPrompt.id} <content>\` *(Smart defaults will handle most cases)*\n\n`;
+      }
+
+      responseText += `**⚙️ Advanced Usage**:\n`;
+      if (convertedPrompt.arguments.length > 1) {
+        const exampleArgs: Record<string, string> = {};
+        convertedPrompt.arguments.forEach((arg) => {
+          exampleArgs[arg.name] = `<your ${arg.name} here>`;
+        });
+        responseText += `\`${prefix}${convertedPrompt.id} ${JSON.stringify(exampleArgs)}\`\n`;
+      }
+      
+      // Add execution mode examples
+      responseText += `\`>>execute_prompt {"command": "${prefix}${convertedPrompt.id} args", "execution_mode": "workflow"}\`\n\n`;
+    } else {
+      responseText += "**Arguments**: None required\n\n";
+      responseText += `**Usage**: \`${prefix}${convertedPrompt.id}\`\n`;
+    }
+
+    // Add gate information if available
+    if (convertedPrompt.gates && convertedPrompt.gates.length > 0) {
+      responseText += `\n**Quality Gates**: ${convertedPrompt.gates.length} validation gates configured\n`;
+    }
+
+    return {
+      content: [{ type: "text" as const, text: responseText }],
+      isError: false,
+    };
+  }
+
+  /**
+   * Generate retry instructions for failed gates
+   */
+  private generateRetryInstructions(failedGates: any[], convertedPrompt: ConvertedPrompt): string {
+    const instructions = [
+      `📋 **RETRY INSTRUCTIONS**:`,
+      ``,
+      `To retry with improvements, use:`,
+      `\`\`\`json`,
+      JSON.stringify({
+        command: `>>${convertedPrompt.id} [improved_arguments]`,
+        execution_mode: "workflow",
+        gate_validation: true
+      }, null, 2),
+      `\`\`\``,
+      ``,
+      `**🎯 Focus on addressing these issues**:`,
+    ];
+
+    failedGates.forEach((gate, index) => {
+      const failedRequirements = gate.evaluationResults
+        .filter((result: any) => !result.passed)
+        .map((result: any) => result.message);
+      
+      instructions.push(`${index + 1}. **Gate: ${gate.gateId}**`);
+      failedRequirements.forEach((msg: string) => {
+        instructions.push(`   - ${msg}`);
+      });
+    });
+
+    instructions.push(
+      ``,
+      `**💡 Improvement Tips**:`,
+      `- Ensure content meets minimum length requirements`,
+      `- Include all required keywords and sections`,
+      `- Follow the specified format (markdown, JSON, etc.)`,
+      `- Review the generated content for completeness`,
+      ``,
+      `**📈 Retry Progress**: ${failedGates.map(g => `${g.gateId}: ${(g.retryCount || 0) + 1}/3`).join(', ')}`
+    );
+
+    return instructions.join('\n');
+  }
+
+  /**
+   * Update execution analytics
+   */
+  private updateExecutionAnalytics(executionState: ExecutionState): void {
+    this.executionAnalytics.totalExecutions++;
+    
+    // Track by execution mode
+    if (executionState.metadata.executionMode) {
+      this.executionAnalytics.executionsByMode[executionState.metadata.executionMode]++;
+    }
+
+    // Track by status
+    switch (executionState.status) {
+      case 'completed':
+        this.executionAnalytics.successfulExecutions++;
+        break;
+      case 'failed':
+        this.executionAnalytics.failedExecutions++;
+        break;
+      case 'retrying':
+        this.executionAnalytics.retriedExecutions++;
+        break;
+    }
+
+    // Track gate validation usage
+    if (executionState.metadata.gateValidation) {
+      this.executionAnalytics.gateValidationCount++;
+    }
+
+    // Calculate average execution time
+    const executionTime = (executionState.metadata.endTime || Date.now()) - executionState.metadata.startTime;
+    this.executionAnalytics.averageExecutionTime = 
+      (this.executionAnalytics.averageExecutionTime * (this.executionAnalytics.totalExecutions - 1) + executionTime) / 
+      this.executionAnalytics.totalExecutions;
+
+    // Add to history (keep last 100 executions)
+    this.executionHistory.push({ ...executionState });
+    if (this.executionHistory.length > 100) {
+      this.executionHistory.shift();
+    }
+
+    this.logger.debug(`Analytics updated: Total executions: ${this.executionAnalytics.totalExecutions}, Success rate: ${(this.executionAnalytics.successfulExecutions / this.executionAnalytics.totalExecutions * 100).toFixed(1)}%`);
+  }
+
+  /**
+   * Register execution analytics tool
+   */
+  private registerExecutionAnalytics(): void {
+    this.mcpServer.tool(
+      "execution_analytics",
+      "📊 View execution analytics and performance metrics for the enhanced prompt execution system",
+      {
+        include_history: z
+          .boolean()
+          .optional()
+          .describe("Include recent execution history (default: false)"),
+        reset_analytics: z
+          .boolean()
+          .optional()
+          .describe("Reset analytics counters (default: false)"),
+      },
+      async ({ 
+        include_history = false, 
+        reset_analytics = false 
+      }: { 
+        include_history?: boolean; 
+        reset_analytics?: boolean; 
+      }) => {
+        try {
+          if (reset_analytics) {
+            this.resetAnalytics();
+            return {
+              content: [{ type: "text", text: "📊 Analytics have been reset to zero." }],
+            };
+          }
+
+          const analytics = this.generateAnalyticsReport(include_history);
+          
+          return {
+            content: [{ type: "text", text: analytics }],
+          };
+        } catch (error) {
+          this.logger.error("Error in execution_analytics tool:", error);
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Failed to generate analytics: ${
+                  error instanceof Error ? error.message : String(error)
+                }`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+    );
+  }
+
+  /**
+   * Generate analytics report
+   */
+  private generateAnalyticsReport(includeHistory: boolean): string {
+    const successRate = this.executionAnalytics.totalExecutions > 0 
+      ? (this.executionAnalytics.successfulExecutions / this.executionAnalytics.totalExecutions * 100).toFixed(1)
+      : "0";
+    
+    const avgTime = this.executionAnalytics.averageExecutionTime > 0
+      ? `${(this.executionAnalytics.averageExecutionTime / 1000).toFixed(2)}s`
+      : "N/A";
+
+    const report = [
+      `📊 **EXECUTION ANALYTICS REPORT**`,
+      ``,
+      `## 📈 Overall Performance`,
+      `- **Total Executions**: ${this.executionAnalytics.totalExecutions}`,
+      `- **Success Rate**: ${successRate}%`,
+      `- **Failed Executions**: ${this.executionAnalytics.failedExecutions}`,
+      `- **Retried Executions**: ${this.executionAnalytics.retriedExecutions}`,
+      `- **Average Execution Time**: ${avgTime}`,
+      ``,
+      `## 🎯 Execution Modes`,
+      `- **Auto Mode**: ${this.executionAnalytics.executionsByMode.auto} executions`,
+      `- **Template Mode**: ${this.executionAnalytics.executionsByMode.template} executions`, 
+      `- **Chain Mode**: ${this.executionAnalytics.executionsByMode.chain} executions`,
+      `- **Workflow Mode**: ${this.executionAnalytics.executionsByMode.workflow} executions`,
+      ``,
+      `## 🛡️ Gate Validation`,
+      `- **Gate Validation Usage**: ${this.executionAnalytics.gateValidationCount} executions`,
+      `- **Gate Adoption Rate**: ${this.executionAnalytics.totalExecutions > 0 ? (this.executionAnalytics.gateValidationCount / this.executionAnalytics.totalExecutions * 100).toFixed(1) : "0"}%`,
+      ``,
+      `## ⚡ Current State`,
+      `- **Active Execution**: ${this.currentExecutionState ? `${this.currentExecutionState.promptId} (${this.currentExecutionState.status})` : 'None'}`,
+      `- **Execution History**: ${this.executionHistory.length} recent executions tracked`,
+    ];
+
+    if (includeHistory && this.executionHistory.length > 0) {
+      report.push(
+        ``,
+        `## 📜 Recent Execution History`,
+        ``,
+        ...this.executionHistory.slice(-10).map((exec, index) => {
+          const duration = exec.metadata.endTime 
+            ? `${((exec.metadata.endTime - exec.metadata.startTime) / 1000).toFixed(2)}s`
+            : 'Ongoing';
+          
+          return `${index + 1}. **${exec.promptId}** (${exec.type}) - ${exec.status} - ${duration}`;
+        })
+      );
+    }
+
+    report.push(
+      ``,
+      `---`,
+      `*Generated at: ${new Date().toISOString()}*`
+    );
+
+    return report.join('\n');
+  }
+
+  /**
+   * Reset analytics
+   */
+  private resetAnalytics(): void {
+    this.executionAnalytics = {
+      totalExecutions: 0,
+      successfulExecutions: 0,
+      failedExecutions: 0,
+      retriedExecutions: 0,
+      gateValidationCount: 0,
+      averageExecutionTime: 0,
+      executionsByMode: {
+        auto: 0,
+        template: 0,
+        chain: 0,
+        workflow: 0,
+      },
+      classificationHistory: {} as Record<string, {
+        classification: PromptClassification;
+        timestamp: number;
+        confidence: number;
+      }>,
+      learningData: [] as any[],
+      confidenceTrends: {} as Record<string, Array<{confidence: number; timestamp: number}>>
+    };
+    this.executionHistory = [];
+    this.logger.info("Execution analytics have been reset");
+  }
+
+  /**
+   * Register backward compatibility alias for process_slash_command
+   */
+  private registerProcessSlashCommandAlias(): void {
+    this.mcpServer.tool(
+      "process_slash_command",
+      "⚠️ DEPRECATED: Use 'execute_prompt' instead. Legacy command processor for backward compatibility.",
+      {
+        command: z
+          .string()
+          .describe(
+            "DEPRECATED: Use execute_prompt instead. Command to process with legacy behavior."
+          ),
+      },
+      async ({ command }: { command: string }, extra: any) => {
+        this.logger.warn(`Using deprecated 'process_slash_command' tool. Please use 'execute_prompt' instead.`);
+        
+        // Call the original implementation for backward compatibility
+        try {
+          const match = command.match(/^(>>|\/)([a-zA-Z0-9_-]+)\s*(.*)/);
+          if (!match) {
+            throw new ValidationError(
+              "Invalid command format. Use >>command_name [arguments] or /command_name [arguments]"
+            );
+          }
+
+          const [, prefix, commandName, commandArgs] = match;
+          const matchingPrompt = this.promptsData.find(
+            (prompt) => prompt.id === commandName || prompt.name === commandName
+          );
+
+          if (!matchingPrompt) {
+            throw new PromptError(
+              `Unknown command: ${prefix}${commandName}. Type >>listprompts to see available commands.`
+            );
+          }
+
+          const convertedPrompt = this.convertedPrompts.find(
+            (cp) => cp.id === matchingPrompt.id
+          );
+
+          if (!convertedPrompt) {
+            throw new PromptError(
+              `Could not find converted prompt data for ${matchingPrompt.id}. Server data might be inconsistent.`
+            );
+          }
+
+          // Use legacy behavior (original logic)
+          const trimmedCommandArgs = commandArgs.trim();
+          if (
+            trimmedCommandArgs === "" &&
+            convertedPrompt.onEmptyInvocation === "return_template"
+          ) {
+            return this.generateTemplateInfo(convertedPrompt, prefix);
+          }
+
+          const promptArgValues: Record<string, string> = {};
+          if (trimmedCommandArgs !== "") {
+            this.parseCommandArguments(
+              trimmedCommandArgs,
+              matchingPrompt,
+              promptArgValues,
+              prefix,
+              commandName
+            );
+          }
+
+          matchingPrompt.arguments.forEach((arg) => {
+            if (!promptArgValues[arg.name]) {
+              promptArgValues[arg.name] = `{{previous_message}}`;
+            }
+          });
+
+          if (convertedPrompt.isChain) {
+            return this.handleChainPrompt(convertedPrompt);
+          }
+
+          return await this.processRegularPrompt(convertedPrompt, promptArgValues);
+        } catch (error) {
+          const { message, isError } = this.handleError(error, "Error processing legacy command");
+          return {
+            content: [{ type: "text", text: message }],
+            isError,
+          };
+        }
+      }
+    );
+  }
+
+  /**
    * Register listprompts tool
    */
   private registerListPrompts(): void {
@@ -359,7 +1390,7 @@ export class McpToolsManager {
             : null;
           const filterText = match ? match[2].trim() : "";
 
-          return this.generatePromptsList(filterText);
+          return this.generateIntelligentPromptsList(filterText);
         } catch (error) {
           this.logger.error("Error executing listprompts command:", error);
           return {
@@ -379,9 +1410,145 @@ export class McpToolsManager {
   }
 
   /**
-   * Generate formatted prompts list
+   * Generate intelligent formatted prompts list with analysis data
    */
-  private generatePromptsList(filterText: string = ""): ToolResponse {
+  private generateIntelligentPromptsList(filterText: string = ""): ToolResponse {
+    // Parse intelligent filter commands
+    const filters = this.parseIntelligentFilters(filterText);
+    
+    return this.generateFormattedPromptsList(filters);
+  }
+
+  /**
+   * Parse intelligent filter commands from filter text
+   */
+  private parseIntelligentFilters(filterText: string): {
+    text?: string;
+    type?: string;
+    confidence?: { min?: number; max?: number };
+    execution?: boolean;
+    gates?: boolean;
+  } {
+    const filters: any = {};
+    
+    if (!filterText) return filters;
+    
+    // Parse type filter: type:workflow, type:chain, type:template
+    const typeMatch = filterText.match(/type:(\w+)/);
+    if (typeMatch) {
+      filters.type = typeMatch[1];
+    }
+    
+    // Parse confidence filter: confidence:>80, confidence:<50, confidence:75-90
+    const confidenceMatch = filterText.match(/confidence:([<>]?)(\d+)(?:-(\d+))?/);
+    if (confidenceMatch) {
+      const [, operator, num1, num2] = confidenceMatch;
+      const val1 = parseInt(num1);
+      const val2 = num2 ? parseInt(num2) : undefined;
+      
+      if (operator === '>') {
+        filters.confidence = { min: val1 };
+      } else if (operator === '<') {
+        filters.confidence = { max: val1 };
+      } else if (val2) {
+        filters.confidence = { min: val1, max: val2 };
+      } else {
+        filters.confidence = { min: val1 - 5, max: val1 + 5 };
+      }
+    }
+    
+    // Parse execution filter: execution:required, execution:optional
+    if (filterText.includes('execution:required')) {
+      filters.execution = true;
+    } else if (filterText.includes('execution:optional')) {
+      filters.execution = false;
+    }
+    
+    // Parse gates filter: gates:yes, gates:no
+    if (filterText.includes('gates:yes')) {
+      filters.gates = true;
+    } else if (filterText.includes('gates:no')) {
+      filters.gates = false;
+    }
+    
+    // Any remaining text is treated as text search
+    const cleanedText = filterText
+      .replace(/type:\w+/g, '')
+      .replace(/confidence:[<>]?\d+(?:-\d+)?/g, '')
+      .replace(/execution:(required|optional)/g, '')
+      .replace(/gates:(yes|no)/g, '')
+      .trim();
+      
+    if (cleanedText) {
+      filters.text = cleanedText;
+    }
+    
+    return filters;
+  }
+
+  /**
+   * Check if a prompt matches the intelligent filters
+   */
+  private matchesIntelligentFilters(prompt: ConvertedPrompt, filters: any): boolean {
+    if (Object.keys(filters).length === 0) return true; // No filters = show all
+
+    // Perform semantic analysis for this prompt
+    const classification = this.semanticAnalyzer.analyzePrompt(prompt);
+    const confidence = Math.round(classification.confidence * 100);
+
+    // Apply type filter
+    if (filters.type && classification.executionType !== filters.type) {
+      return false;
+    }
+
+    // Apply confidence filter
+    if (filters.confidence) {
+      if (filters.confidence.min && confidence < filters.confidence.min) {
+        return false;
+      }
+      if (filters.confidence.max && confidence > filters.confidence.max) {
+        return false;
+      }
+    }
+
+    // Apply execution filter
+    if (filters.execution !== undefined) {
+      if (filters.execution !== classification.requiresExecution) {
+        return false;
+      }
+    }
+
+    // Apply gates filter
+    if (filters.gates !== undefined) {
+      const hasGates = classification.suggestedGates.length > 0;
+      if (filters.gates !== hasGates) {
+        return false;
+      }
+    }
+
+    // Apply text filter
+    if (filters.text) {
+      const searchText = filters.text.toLowerCase();
+      const searchableText = [
+        prompt.id,
+        prompt.name,
+        prompt.description,
+        classification.executionType,
+        ...classification.suggestedGates
+      ].join(' ').toLowerCase();
+      
+      if (!searchableText.includes(searchText)) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  /**
+   * Generate formatted prompts list with intelligent filtering
+   */
+  private generateFormattedPromptsList(filters: any): ToolResponse {
     let listpromptsText = "# Available Commands\n\n";
 
     // Group prompts by category
@@ -397,7 +1564,11 @@ export class McpToolsManager {
       if (!promptsByCategory[prompt.category]) {
         promptsByCategory[prompt.category] = [];
       }
-      promptsByCategory[prompt.category].push(prompt);
+      
+      // Apply intelligent filtering
+      if (this.matchesIntelligentFilters(prompt, filters)) {
+        promptsByCategory[prompt.category].push(prompt);
+      }
     });
 
     // Add each category and its prompts
@@ -408,7 +1579,21 @@ export class McpToolsManager {
       listpromptsText += `## ${categoryName}\n\n`;
 
       prompts.forEach((prompt) => {
-        listpromptsText += `### /${prompt.id}\n`;
+        // Perform intelligent analysis for each prompt
+        const classification = this.semanticAnalyzer.analyzePrompt(prompt);
+        const confidence = Math.round(classification.confidence * 100);
+        
+        // Create confidence indicator
+        let confidenceIcon = "🟢"; // High confidence (>75%)
+        if (confidence < 50) confidenceIcon = "🔴"; // Low confidence
+        else if (confidence < 75) confidenceIcon = "🟡"; // Medium confidence
+        
+        // Create execution type badge
+        const typeBadge = classification.executionType === "workflow" ? "⚙️" :
+                         classification.executionType === "chain" ? "🔗" : "📄";
+
+        listpromptsText += `### ${typeBadge} /${prompt.id} ${confidenceIcon}\n`;
+        
         if (prompt.name !== prompt.id) {
           listpromptsText += `*Alias: /${prompt.name}*\n\n`;
         } else {
@@ -416,6 +1601,19 @@ export class McpToolsManager {
         }
 
         listpromptsText += `${prompt.description}\n\n`;
+        
+        // Add intelligent analysis summary
+        listpromptsText += `🧠 **Analysis**: ${classification.executionType} (${confidence}% confidence)`;
+        if (classification.requiresExecution) {
+          listpromptsText += ` • Requires execution`;
+        }
+        if (classification.suggestedGates.length > 0) {
+          listpromptsText += ` • Quality gates: ${classification.suggestedGates.slice(0, 2).join(', ')}`;
+          if (classification.suggestedGates.length > 2) {
+            listpromptsText += ` (+${classification.suggestedGates.length - 2} more)`;
+          }
+        }
+        listpromptsText += `\n\n`;
 
         if (prompt.arguments.length > 0) {
           listpromptsText += "**Arguments:**\n\n";
@@ -444,11 +1642,38 @@ export class McpToolsManager {
       });
     });
 
+    // Add filter summary if filters were applied
+    const hasFilters = Object.keys(filters).length > 0;
+    if (hasFilters) {
+      listpromptsText += "## 🔍 Active Filters\n\n";
+      if (filters.type) listpromptsText += `- **Type**: ${filters.type}\n`;
+      if (filters.confidence) {
+        const { min, max } = filters.confidence;
+        if (min && max) listpromptsText += `- **Confidence**: ${min}% - ${max}%\n`;
+        else if (min) listpromptsText += `- **Confidence**: >${min}%\n`;
+        else if (max) listpromptsText += `- **Confidence**: <${max}%\n`;
+      }
+      if (filters.execution !== undefined) {
+        listpromptsText += `- **Execution**: ${filters.execution ? 'Required' : 'Optional'}\n`;
+      }
+      if (filters.gates !== undefined) {
+        listpromptsText += `- **Quality Gates**: ${filters.gates ? 'Yes' : 'No'}\n`;
+      }
+      if (filters.text) listpromptsText += `- **Text Search**: "${filters.text}"\n`;
+      listpromptsText += "\n";
+    }
+
     // Special commands
     listpromptsText += "## Special Commands\n\n";
     listpromptsText += "### >>listprompts\n\n";
-    listpromptsText += "Lists all available commands and their usage.\n\n";
-    listpromptsText += "**Usage:** `>>listprompts` or `/listprompts`\n\n";
+    listpromptsText += "Lists all available commands with intelligent analysis.\n\n";
+    listpromptsText += "**Basic Usage:** `>>listprompts` or `/listprompts`\n\n";
+    listpromptsText += "**Intelligent Filtering:**\n";
+    listpromptsText += "- `>>listprompts type:workflow` - Show only workflow prompts\n";
+    listpromptsText += "- `>>listprompts confidence:>80` - Show high-confidence prompts\n";
+    listpromptsText += "- `>>listprompts execution:required` - Show prompts that require execution\n";
+    listpromptsText += "- `>>listprompts gates:yes` - Show prompts with quality gates\n";
+    listpromptsText += "- `>>listprompts analysis type:workflow` - Combine text and intelligent filters\n\n";
 
     return {
       content: [{ type: "text", text: listpromptsText }],
