@@ -26,6 +26,10 @@ import {
   createConversationManager,
 } from "./conversation-manager.js";
 import { createPromptExecutor, PromptExecutor } from "./prompt-executor.js";
+import { createWorkflowEngine, WorkflowEngine } from "./workflow-engine.js";
+import { createGateEvaluator, GateEvaluator } from "../utils/gateValidation.js";
+import { createEnhancedGateEvaluator, EnhancedGateEvaluator } from "../utils/enhanced-gate-evaluator.js";
+import { createGateManagementTools, GateManagementTools } from "../mcp-tools/gate-management-tools.js";
 
 // Import types
 import { Category, ConvertedPrompt, PromptData } from "../types/index.js";
@@ -41,6 +45,10 @@ export class ApplicationOrchestrator {
   private conversationManager: ConversationManager;
   private promptManager: PromptManager;
   private promptExecutor: PromptExecutor;
+  private workflowEngine: WorkflowEngine;
+  private gateEvaluator: GateEvaluator;
+  private enhancedGateEvaluator: EnhancedGateEvaluator;
+  private gateManagementTools: GateManagementTools;
   private mcpToolsManager: McpToolsManager;
   private transportManager: TransportManager;
   private apiManager?: ApiManager;
@@ -62,6 +70,10 @@ export class ApplicationOrchestrator {
     this.conversationManager = null as any;
     this.promptManager = null as any;
     this.promptExecutor = null as any;
+    this.workflowEngine = null as any;
+    this.gateEvaluator = null as any;
+    this.enhancedGateEvaluator = null as any;
+    this.gateManagementTools = null as any;
     this.mcpToolsManager = null as any;
     this.transportManager = null as any;
     this.mcpServer = null as any;
@@ -618,6 +630,15 @@ ${attemptedPaths}
    * Phase 3: Initialize remaining modules with loaded data
    */
   private async initializeModules(): Promise<void> {
+    // Initialize gate evaluator (legacy)
+    this.gateEvaluator = createGateEvaluator(this.logger);
+    
+    // Initialize enhanced gate evaluator (Phase 2)
+    this.enhancedGateEvaluator = createEnhancedGateEvaluator(this.logger);
+    
+    // Initialize gate management tools
+    this.gateManagementTools = createGateManagementTools(this.logger, this.enhancedGateEvaluator);
+    
     // Initialize prompt executor
     this.promptExecutor = createPromptExecutor(
       this.logger,
@@ -625,6 +646,19 @@ ${attemptedPaths}
       this.conversationManager
     );
     this.promptExecutor.updatePrompts(this.convertedPrompts);
+    
+    // Initialize workflow engine with enhanced gate evaluator
+    this.workflowEngine = createWorkflowEngine(
+      this.logger,
+      this.promptExecutor,
+      this.enhancedGateEvaluator as any // Type assertion to handle interface compatibility
+    );
+    
+    // Set up cross-references
+    this.promptExecutor.setWorkflowEngine(this.workflowEngine);
+    
+    // Register workflows from converted prompts
+    await this.registerWorkflows();
 
     // Initialize MCP tools manager
     this.mcpToolsManager = createMcpToolsManager(
@@ -643,6 +677,9 @@ ${attemptedPaths}
       this.categories
     );
 
+    // Set gate management tools
+    // this.mcpToolsManager.setGateManagementTools(this.gateManagementTools); // TODO: Add when gate management tools are implemented
+
     // Register all MCP tools
     await this.mcpToolsManager.registerAllTools();
 
@@ -650,6 +687,29 @@ ${attemptedPaths}
     await this.promptManager.registerAllPrompts(this.convertedPrompts);
 
     this.logger.info("All modules initialized successfully");
+  }
+
+  /**
+   * Register workflows from converted prompts
+   */
+  private async registerWorkflows(): Promise<void> {
+    let workflowCount = 0;
+    
+    for (const prompt of this.convertedPrompts) {
+      if (prompt.isWorkflow && prompt.workflowDefinition) {
+        try {
+          await this.workflowEngine.registerWorkflow(prompt.workflowDefinition);
+          workflowCount++;
+          this.logger.debug(`Registered workflow: ${prompt.workflowDefinition.id}`);
+        } catch (error) {
+          this.logger.error(`Failed to register workflow ${prompt.workflowDefinition.id}:`, error);
+        }
+      }
+    }
+    
+    if (workflowCount > 0) {
+      this.logger.info(`Registered ${workflowCount} workflows`);
+    }
   }
 
   /**
@@ -768,6 +828,10 @@ ${attemptedPaths}
       await this.promptManager.registerAllPrompts(this.convertedPrompts);
       this.logger.info("✅ Prompts re-registered with MCP Server.");
 
+      // Step 4: Re-register workflows from updated prompts
+      await this.registerWorkflows();
+      this.logger.info("✅ Workflows re-registered with Workflow Engine.");
+
       this.logger.info("🚀 Full server refresh completed successfully.");
     } catch (error) {
       this.logger.error("❌ Error during full server refresh:", error);
@@ -826,6 +890,8 @@ ${attemptedPaths}
       textReferenceManager: this.textReferenceManager,
       conversationManager: this.conversationManager,
       promptExecutor: this.promptExecutor,
+      workflowEngine: this.workflowEngine,
+      gateEvaluator: this.gateEvaluator,
       mcpToolsManager: this.mcpToolsManager,
       apiManager: this.apiManager,
       serverManager: this.serverManager,
@@ -877,6 +943,8 @@ ${attemptedPaths}
     const modulesInitialized = !!(
       this.promptManager &&
       this.promptExecutor &&
+      this.workflowEngine &&
+      this.gateEvaluator &&
       this.mcpToolsManager
     );
     moduleStatus.modulesInitialized = modulesInitialized;
@@ -890,6 +958,8 @@ ${attemptedPaths}
     moduleStatus.textReferenceManager = !!this.textReferenceManager;
     moduleStatus.conversationManager = !!this.conversationManager;
     moduleStatus.promptExecutor = !!this.promptExecutor;
+    moduleStatus.workflowEngine = !!this.workflowEngine;
+    moduleStatus.gateEvaluator = !!this.gateEvaluator;
     moduleStatus.mcpToolsManager = !!this.mcpToolsManager;
     moduleStatus.transportManager = !!this.transportManager;
     moduleStatus.apiManager = !!this.apiManager;

@@ -1,113 +1,61 @@
 # Advanced Note Integration with Content Analysis Chain
 
 ## Description
-Advanced workflow that runs a comprehensive content analysis chain to transform raw content into publication-ready, interconnected notes optimized for Obsidian knowledge management systems. Uses intelligent defaults - only pass the content argument.
-
-## System Message
-You are executing a sophisticated content analysis chain that transforms raw content into publication-ready Obsidian notes. Follow the S.P.A.R.C. methodology (Strategic Personal Archive with Refined Connectivity) and C.A.G.E.E.R.F framework. Each step builds upon the previous one to create comprehensive, interconnected knowledge assets. Use intelligent defaults for all optional parameters.
+Advanced workflow that processes YouTube videos and other content through comprehensive transcript analysis, strategic chunking, and content analysis chain to transform raw material into publication-ready, interconnected notes optimized for Obsidian knowledge management systems with strategic callout usage.
 
 ## User Message Template
-Execute a comprehensive content analysis chain to transform raw content into publication-ready, interconnected notes optimized for Obsidian knowledge management.
+**ADVANCED NOTE INTEGRATION WITH COMPREHENSIVE CONTENT PROCESSING**
 
-## Content Analysis Chain Workflow
+Transform YouTube videos and other content into publication-ready, interconnected notes using comprehensive transcript analysis and strategic content processing:
 
-### Input Content
+**CONTENT TO INTEGRATE:**
+```
 {{content}}
+```
 
-{% if existing_notes %}
-### Existing Notes Context
-{{existing_notes}}
-{% endif %}
+**INTEGRATION PARAMETERS:**
+- **Domain**: {{domain}} (auto-detect if not specified)
+- **Analysis Depth**: {{analysis_depth}} (default: comprehensive)
+- **Integration Level**: {{integration_level}} (default: advanced)
+- **Quality Standards**: {{quality_standards}} (default: comprehensive)
 
-{% if vault_context %}
-### Vault Context
-{{vault_context}}
-{% endif %}
+**STRATEGIC CALLOUT USAGE REQUIREMENTS:**
+Use Obsidian callouts ONLY when they enhance information flow and organization:
 
-### Processing Configuration (Using Intelligent Defaults)
-- **Domain**: {{domain or 'general'}}
-- **Analysis Depth**: {{analysis_depth or 'comprehensive'}}
-- **Structure Type**: {{structure_type or 'comprehensive'}}
-- **Integration Level**: {{integration_level or 'advanced'}}
-- **Target Readability**: {{target_readability or 'comprehensive'}}
-- **Metadata Depth**: {{metadata_depth or 'advanced'}}
-- **Quality Standards**: {{quality_standards or 'comprehensive'}}
-- **Enhancement Level**: {{enhancement_level or 'comprehensive'}}
+**WHEN TO USE CALLOUTS:**
+- **Complex techniques** that need step-by-step breakdown
+- **Critical warnings** that could impact user success
+- **Key insights** that summarize important concepts
+- **Practical applications** that require special attention
+- **Historical context** or expert quotes that add authority
 
-### Expected Output
-This workflow will produce a sophisticated, publication-ready note that:
-- Preserves all original insights while adding professional structure
-- Leverages advanced Obsidian features (callouts, multi-column layouts, metadata)
-- Creates meaningful connections with existing vault content
-- Follows S.P.A.R.C. methodology for strategic knowledge management
-- Implements C.A.G.E.E.R.F framework for structured analysis
-- Meets professional documentation standards
+**WHEN NOT TO USE CALLOUTS:**
+- Simple bullet points or lists
+- Basic information that flows naturally in text
+- Every section heading or paragraph
+- Routine explanations or descriptions
+- Excessive visual emphasis that clutters content
 
-Execute the chain workflow to transform the provided content into an enhanced, integrated note ready for your Obsidian knowledge management system.
+**STRATEGIC CALLOUT TYPES:**
+- `> [!tip]` - Only for genuinely valuable practical advice
+- `> [!example]` - Only for complex technique breakdowns
+- `> [!warning]` - Only for critical cautions or limitations
+- `> [!abstract]` - Only for core philosophy or key concepts
+- `> [!quote]` - Only for authoritative references or master examples
 
-## Chain Steps
+**CONTENT PROCESSING WORKFLOW:**
+1. **Extract & Analyze**: Process source content comprehensively
+2. **Structure Naturally**: Use headers, bullet points, and natural text flow
+3. **Strategic Callouts**: Apply callouts ONLY where they enhance understanding
+4. **Strategic Integration**: Link to existing vault notes and MOCs
+5. **Quality Validation**: Ensure clean, readable formatting
+6. **S.P.A.R.C. Methodology**: Apply Strategic, Personal, Archive, Refined, Connectivity principles
 
-1. promptId: content_preservation_analysis
-   stepName: Content Preservation Analysis
-   inputMapping:
-     content: content
-     existing_content: existing_notes
-     analysis_depth: analysis_depth
-   outputMapping:
-     analyzed_content: preserved_analysis
+**REQUIRED DELIVERABLES:**
+- Complete markdown note with proper frontmatter
+- Minimal, strategic callout usage for maximum impact
+- Cross-references to existing vault notes
+- MOC integration updates
+- Clean, professional formatting following vault standards
 
-2. promptId: layered_note_structure
-   stepName: Layered Note Structure Creation
-   inputMapping:
-     analyzed_content: preserved_analysis
-     vault_context: vault_context
-     structure_type: structure_type
-   outputMapping:
-     structured_content: layered_structure
-
-3. promptId: smart_content_refinement
-   stepName: Smart Content Refinement
-   inputMapping:
-     raw_content: layered_structure
-     vault_context: vault_context
-     integration_level: integration_level
-     target_readability: target_readability
-   outputMapping:
-     refined_content: smart_refined
-
-4. promptId: obsidian_metadata_optimizer
-   stepName: Obsidian Metadata Optimization
-   inputMapping:
-     note_content: smart_refined
-     vault_structure: vault_context
-     metadata_depth: metadata_depth
-   outputMapping:
-     optimized_content: metadata_optimized
-
-5. promptId: vault_integration_optimizer
-   stepName: Vault Integration Optimization
-   inputMapping:
-     note_content: metadata_optimized
-     vault_structure: vault_context
-     integration_level: integration_level
-   outputMapping:
-     integrated_content: vault_integrated
-
-6. promptId: note_quality_assurance
-   stepName: Quality Assurance
-   inputMapping:
-     note_content: vault_integrated
-     original_source: content
-     quality_standards: quality_standards
-   outputMapping:
-     quality_assured: qa_content
-
-7. promptId: format_enhancement
-   stepName: Format Enhancement
-   inputMapping:
-     existing_content: qa_content
-     domain: domain
-     enhancement_level: enhancement_level
-   outputMapping:
-     final_note: enhanced_note
-
+Execute this workflow systematically, prioritizing readability and natural flow over visual emphasis.

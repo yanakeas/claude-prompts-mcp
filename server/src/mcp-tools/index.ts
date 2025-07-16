@@ -25,7 +25,7 @@ import {
 import { createGateEvaluator, GateEvaluator } from "../utils/gateValidation.js";
 import { SemanticAnalyzer, PromptClassification } from "../utils/semanticAnalyzer.js";
 import { PromptManagementTools } from "./prompt-management-tools.js";
-import { GateManagementTools } from "./gate-management-tools.js";
+// import { GateManagementTools } from "./gate-management-tools.js"; // TODO: Add when gate management tools are implemented
 import { TemplateGenerationTools } from "./template-generation-tools.js";
 
 /**
@@ -38,7 +38,7 @@ export class McpToolsManager {
   private configManager: ConfigManager;
   private promptManagementTools: PromptManagementTools;
   private gateEvaluator: GateEvaluator;
-  private gateManagementTools?: GateManagementTools;
+  // private gateManagementTools?: GateManagementTools; // TODO: Add when gate management tools are implemented
   private templateGenerationTools: TemplateGenerationTools;
   private semanticAnalyzer: SemanticAnalyzer;
   private promptsData: PromptData[] = [];
@@ -95,9 +95,9 @@ export class McpToolsManager {
   /**
    * Set gate management tools (called after initialization)
    */
-  setGateManagementTools(gateManagementTools: GateManagementTools): void {
-    this.gateManagementTools = gateManagementTools;
-  }
+  // setGateManagementTools(gateManagementTools: GateManagementTools): void {
+  //   this.gateManagementTools = gateManagementTools;
+  // } // TODO: Add when gate management tools are implemented
 
   /**
    * Register all MCP tools with the server
@@ -117,9 +117,9 @@ export class McpToolsManager {
     this.registerExecutionAnalytics();
 
     // Register gate management tools if available
-    if (this.gateManagementTools) {
-      this.registerGateManagementTools();
-    }
+    // if (this.gateManagementTools) {
+    //   this.registerGateManagementTools(); // TODO: Add when gate management tools are implemented
+    // }
 
     // Register template generation tools
     this.templateGenerationTools.registerAllTools();
@@ -1809,7 +1809,8 @@ export class McpToolsManager {
   /**
    * Register consolidated gate management tool
    */
-  private registerGateManagementTools(): void {
+  /*
+  private registerGateManagementTools(): void { // TODO: Add when gate management tools are implemented
     if (!this.gateManagementTools) {
       return;
     }
@@ -1939,6 +1940,7 @@ export class McpToolsManager {
 
     this.logger.info("Gate management tool registered successfully");
   }
+  */
 
   /**
    * Error handling helper

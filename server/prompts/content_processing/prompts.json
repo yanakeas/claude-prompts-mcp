@@ -4,22 +4,22 @@
       "id": "content_preservation_analysis",
       "name": "Content Preservation Analysis",
       "category": "content_processing",
-      "description": "Systematic content analysis with full preservation of insights, designed to maintain all valuable information while creating structured understanding",
+      "description": "Comprehensive content analysis with strategic chunking for YouTube videos and other content, ensuring complete information preservation, systematic processing, and professional-grade content extraction that maintains context and meaning.",
       "file": "content_preservation_analysis.md",
       "arguments": [
         {
           "name": "content",
-          "description": "The content to analyze with preservation focus",
-          "required": true
+          "description": "YouTube URL or other content to be comprehensively analyzed with strategic chunking and complete preservation",
+          "required": false
         },
         {
           "name": "existing_content",
-          "description": "Any existing content to preserve and integrate",
+          "description": "Any existing content to preserve and integrate with new analysis",
           "required": false
         },
         {
           "name": "analysis_depth",
-          "description": "Analysis depth: 'surface', 'standard', 'comprehensive', 'exhaustive'",
+          "description": "Analysis depth: 'surface', 'standard', 'comprehensive', 'exhaustive' (default: comprehensive)",
           "required": false
         }
       ]
@@ -28,22 +28,22 @@
       "id": "layered_note_structure",
       "name": "Layered Note Structure Creator",
       "category": "content_processing",
-      "description": "Creates comprehensive note structures with multiple information layers, designed for maximum knowledge retention and multiple use cases",
+      "description": "Creates sophisticated, multi-layered note structures with comprehensive analysis, professional presentation, rich formatting, and strategic knowledge integration that rivals industry-standard technical documentation.",
       "file": "layered_note_structure.md",
       "arguments": [
         {
           "name": "analyzed_content",
-          "description": "The analyzed content to structure",
-          "required": true
+          "description": "The analyzed content to structure with multi-layered professional presentation",
+          "required": false
         },
         {
           "name": "vault_context",
-          "description": "Vault context and existing connections",
+          "description": "Current vault structure and organization for strategic integration",
           "required": false
         },
         {
           "name": "structure_type",
-          "description": "Structure type: 'comprehensive', 'method_focused', 'reference_optimized'",
+          "description": "Structure type: 'comprehensive', 'method_focused', 'reference_optimized', 'publication_ready' (default: comprehensive)",
           "required": false
         }
       ]
@@ -52,22 +52,22 @@
       "id": "vault_integration_optimizer",
       "name": "Vault Integration Optimizer",
       "category": "content_processing",
-      "description": "Optimizes note integration with existing vault structure, creating comprehensive connections and cross-references for maximum knowledge network effect",
+      "description": "Creates comprehensive strategic integration between new notes and existing vault ecosystem, establishing sophisticated knowledge networks, professional cross-references, and industry-standard connections that enhance discoverability and career development value.",
       "file": "vault_integration_optimizer.md",
       "arguments": [
         {
           "name": "note_content",
-          "description": "The note content to integrate",
-          "required": true
+          "description": "The note content to strategically integrate with existing vault ecosystem",
+          "required": false
         },
         {
           "name": "vault_structure",
-          "description": "Current vault structure and related content",
-          "required": true
+          "description": "Current vault structure and related content for strategic integration mapping",
+          "required": false
         },
         {
           "name": "integration_level",
-          "description": "Integration level: 'basic', 'standard', 'comprehensive', 'network_optimized'",
+          "description": "Integration level: 'basic', 'standard', 'advanced', 'strategic_networking' (default: advanced)",
           "required": false
         }
       ]
@@ -76,22 +76,22 @@
       "id": "note_quality_assurance",
       "name": "Note Quality Assurance",
       "category": "content_processing",
-      "description": "Comprehensive quality assurance for note-taking workflows, ensuring content preservation, structural integrity, and optimal knowledge retention",
+      "description": "Comprehensive quality assurance for professional-grade note content, ensuring publication-ready standards, technical accuracy, professional presentation, and strategic value that rivals industry documentation and educational resources.",
       "file": "note_quality_assurance.md",
       "arguments": [
         {
           "name": "note_content",
-          "description": "The complete note content to evaluate",
-          "required": true
+          "description": "The complete note content to evaluate for professional quality standards",
+          "required": false
         },
         {
           "name": "original_source",
-          "description": "Original source material for comparison",
+          "description": "Original source material for comparison and accuracy validation",
           "required": false
         },
         {
           "name": "quality_standards",
-          "description": "Quality standards: 'basic', 'professional', 'comprehensive', 'academic'",
+          "description": "Quality standards level: 'basic', 'professional', 'comprehensive', 'publication_ready' (default: comprehensive)",
           "required": false
         }
       ]
@@ -100,27 +100,27 @@
       "id": "smart_content_refinement",
       "name": "Smart Content Refinement",
       "category": "content_processing",
-      "description": "Intelligent content refinement with advanced Obsidian vault integration, utilizing backlinks, tags, plugins, and knowledge management features for optimal discoverability and connection",
+      "description": "Transform raw content into sophisticated, publication-ready documentation with advanced Obsidian features, rich analysis, professional presentation, and comprehensive technical depth that rivals industry-standard documentation using strategic callout syntax.",
       "file": "smart_content_refinement.md",
       "arguments": [
         {
           "name": "raw_content",
-          "description": "The raw content to refine and integrate",
-          "required": true
+          "description": "The raw content to transform into publication-ready, professional documentation",
+          "required": false
         },
         {
           "name": "vault_context",
-          "description": "Context about the vault structure and existing content",
+          "description": "Context about the vault structure and existing content for strategic integration",
           "required": false
         },
         {
           "name": "integration_level",
-          "description": "Integration level: 'basic', 'standard', 'advanced', 'network_optimized'",
+          "description": "Integration level: 'basic', 'standard', 'advanced', 'publication_ready' (default: advanced)",
           "required": false
         },
         {
           "name": "target_readability",
-          "description": "Target readability: 'concise', 'balanced', 'comprehensive'",
+          "description": "Target readability: 'concise', 'balanced', 'comprehensive', 'publication_quality' (default: comprehensive)",
           "required": false
         }
       ]
@@ -129,22 +129,22 @@
       "id": "obsidian_metadata_optimizer",
       "name": "Obsidian Metadata Optimizer",
       "category": "content_processing",
-      "description": "Creates comprehensive, intelligent metadata and frontmatter for Obsidian notes, optimizing for discoverability, organization, and advanced plugin functionality",
+      "description": "Creates comprehensive, intelligent metadata and frontmatter systems for professional-grade Obsidian notes, optimizing for discoverability, advanced plugin functionality, and strategic knowledge management with industry-standard tagging and classification.",
       "file": "obsidian_metadata_optimizer.md",
       "arguments": [
         {
           "name": "note_content",
-          "description": "The note content to analyze for metadata creation",
-          "required": true
+          "description": "The note content to analyze for comprehensive metadata creation",
+          "required": false
         },
         {
           "name": "vault_structure",
-          "description": "Current vault structure and organization",
+          "description": "Current vault structure and organization for strategic metadata integration",
           "required": false
         },
         {
           "name": "metadata_depth",
-          "description": "Metadata depth: 'essential', 'comprehensive', 'advanced', 'network_optimized'",
+          "description": "Metadata depth: 'essential', 'comprehensive', 'advanced', 'professional_grade' (default: advanced)",
           "required": false
         }
       ]
@@ -153,22 +153,22 @@
       "id": "format_enhancement",
       "name": "Format Enhancement Workflow",
       "category": "content_processing",
-      "description": "Transform existing basic markdown notes to advanced Obsidian formatting standards with professional presentation and interactive elements",
+      "description": "Transform basic markdown notes into comprehensive, publication-ready content with sophisticated formatting, rich callouts, comparison tables, and professional presentation standards that rival industry documentation using proper Obsidian callout syntax.",
       "file": "format_enhancement.md",
       "arguments": [
         {
           "name": "existing_content",
-          "description": "The existing note content to enhance with advanced formatting",
-          "required": true
+          "description": "The existing note content to transform into publication-ready, professional documentation",
+          "required": false
         },
         {
           "name": "domain",
-          "description": "Knowledge domain for appropriate formatting strategy",
+          "description": "Knowledge domain for contextual formatting (e.g., 'technical', 'creative', 'business')",
           "required": false
         },
         {
           "name": "enhancement_level",
-          "description": "Enhancement intensity: standard, comprehensive, showcase (default: comprehensive)",
+          "description": "Enhancement intensity: 'comprehensive', 'publication_ready', 'industry_standard' (default: publication_ready)",
           "required": false
         }
       ]
@@ -235,13 +235,13 @@
       "id": "noteIntegration",
       "name": "Advanced Note Integration with Content Analysis Chain",
       "category": "content_processing",
-      "description": "Advanced workflow that runs a comprehensive content analysis chain to transform raw content into publication-ready, interconnected notes optimized for Obsidian knowledge management systems. Uses intelligent defaults - only pass the content argument.",
+      "description": "Advanced workflow that processes YouTube videos and other content through comprehensive transcript analysis, strategic chunking, and content analysis chain to transform raw material into publication-ready, interconnected notes optimized for Obsidian knowledge management systems with strategic callout usage.",
       "file": "noteIntegration.md",
       "arguments": [
         {
           "name": "content",
-          "description": "The raw content to be processed and integrated",
-          "required": true
+          "description": "YouTube URL or other content to be comprehensively processed and integrated",
+          "required": false
         },
         {
           "name": "existing_notes",
@@ -250,7 +250,7 @@
         },
         {
           "name": "vault_context",
-          "description": "Context about the vault structure and existing content",
+          "description": "Context about the vault structure and existing content for strategic integration",
           "required": false
         },
         {
@@ -293,8 +293,88 @@
           "description": "Enhancement intensity: 'standard', 'comprehensive', 'showcase' (default: comprehensive)",
           "required": false
         }
-      ],
-      "onEmptyInvocation": "execute_if_possible"
+      ]
+    },
+    {
+      "id": "vault_structure_analyzer",
+      "name": "Vault Structure Analyzer",
+      "category": "content_processing",
+      "description": "Analyzes vault structure to identify existing notes, MOCs, and connection opportunities for systematic integration. Provides real vault context for other workflow steps.",
+      "file": "vault_structure_analyzer.md",
+      "arguments": [
+        {
+          "name": "content_topic",
+          "description": "The topic/domain of content to be integrated",
+          "required": true
+        },
+        {
+          "name": "vault_path",
+          "description": "Root path to vault (default: current working directory)",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "note_refinement",
+      "name": "Advanced Obsidian Note Refinement",
+      "category": "content_processing",
+      "description": "Transform existing notes into publication-ready, professional documentation with sophisticated formatting, rich callouts, comparison tables, Mermaid diagrams, and comprehensive analysis that rivals industry-standard technical documentation.",
+      "file": "note_refinement.md",
+      "arguments": [
+        {
+          "name": "existing_note",
+          "description": "The existing note content to transform into publication-ready, professional documentation with advanced formatting and comprehensive analysis",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "deep_vault_integration",
+      "name": "Deep Vault Integration Workflow",
+      "category": "content_processing",
+      "description": "Comprehensive workflow ensuring seamless deep integration of any content into the vault, preventing shallow placement and establishing strategic knowledge networks following S.P.A.R.C. methodology.",
+      "file": "deep_vault_integration.md",
+      "arguments": [
+        {
+          "name": "content",
+          "description": "The content to be integrated into the vault with deep networking",
+          "required": false
+        },
+        {
+          "name": "vault_context",
+          "description": "Current vault structure and existing content context",
+          "required": false
+        },
+        {
+          "name": "integration_level",
+          "description": "Integration depth: basic, standard, advanced, network_optimized (default: network_optimized)",
+          "required": false
+        },
+        {
+          "name": "domain",
+          "description": "Primary knowledge domain for content placement",
+          "required": false
+        },
+        {
+          "name": "quality_standards",
+          "description": "Quality level: basic, professional, comprehensive, academic (default: comprehensive)",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "obsidian_callout_mapping",
+      "name": "Obsidian Callout Mapping System",
+      "category": "content_processing",
+      "description": "Comprehensive mapping system for applying proper Obsidian callout syntax based on content type, ensuring consistent and professional formatting throughout vault notes.",
+      "file": "obsidian_callout_mapping.md",
+      "arguments": [
+        {
+          "name": "content",
+          "description": "The content to analyze and map to appropriate Obsidian callout types",
+          "required": true
+        }
+      ]
     }
   ]
 }
