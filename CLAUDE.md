@@ -6,6 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Essential Commands
 - **Build**: `npm run build` - Compiles TypeScript to JavaScript in `dist/`
+- **Type Check**: `npm run typecheck` - Validates TypeScript types without compilation
 - **Start**: `npm start` - Runs the compiled server
 - **Development**: `npm run dev` - Watches TypeScript files and restarts on changes
 - **Test**: `npm test` - Runs the test server
@@ -23,6 +24,35 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Working Directory
 All commands should be run from the `server/` directory: `cd server && npm run build`
+
+Examples:
+- `cd server && npm run build` - Compile TypeScript
+- `cd server && npm run typecheck` - Validate types only
+- `cd server && npm run dev` - Development mode
+- `cd server && npm test` - Run test suite
+
+## CI/CD Pipeline
+
+### GitHub Actions Workflows
+The project uses GitHub Actions for automated testing and validation:
+
+#### Main CI Pipeline (`.github/workflows/ci.yml`)
+- **Triggers**: Push to `main`/`develop` branches, Pull Requests to `main`
+- **Matrix Testing**: Node.js versions 16, 18, 20 across Ubuntu, Windows, macOS
+- **Validation Steps**: TypeScript checking, build validation, test execution, server startup
+- **CAGEERF Integration**: Validates all CAGEERF framework modules compile and load
+- **Artifacts**: Uploads build artifacts for successful Ubuntu + Node 18 builds
+
+#### PR Validation (`.github/workflows/pr-validation.yml`)
+- **Triggers**: Pull request events (opened, synchronized, reopened)
+- **Quality Gates**: TypeScript, build, tests, CAGEERF validation, MCP tools validation
+- **Feedback**: Automated PR comments with validation results and changed files analysis
+- **Compatibility**: Checks for breaking changes when targeting main branch
+
+### Quality Gates
+- **Mandatory**: TypeScript compilation, build success, test passing, server startup
+- **CAGEERF Validation**: All analyzer modules, template tools, and MCP integrations
+- **Code Quality**: No sensitive files, proper TypeScript structure, dependency consistency
 
 ## Project Architecture
 
@@ -187,3 +217,86 @@ server/prompts/
 - Transport-specific testing modes
 
 This architecture provides a robust, scalable system for AI prompt management with enterprise-grade features including hot-reloading, comprehensive error handling, and multi-transport support.
+
+## Implementation Workflow & Scratchpad Management
+
+### Active Development Tracking
+Claude should maintain active progress tracking using the scratchpad system:
+
+#### Primary Scratchpad (`/plans/implementation-scratchpad.md`)
+- **Session Status**: Current phase, active task, date stamp
+- **Architecture Notes**: Code structure discoveries and patterns observed
+- **Technical Decisions**: Library choices, performance considerations, risk mitigation
+- **Progress Tracking**: Completed tasks, next actions, implementation checkpoints
+- **Session Notes**: Between-session continuity and quick reference
+
+#### Scratchpad Update Protocol
+1. **Session Start**: Update current session status and review previous progress
+2. **During Work**: Log technical decisions, discoveries, and implementation notes
+3. **Task Completion**: Mark completed tasks and note any issues encountered
+4. **Session End**: Update next session goals and current progress status
+
+### TODO-Based Implementation Structure
+```
+plans/
+├── implementation-scratchpad.md     # Main workspace tracking (MANDATORY)
+└── mcp-system-enhancements/         # TODO: MCP System Enhancements
+    ├── master-implementation-plan.md    # Complete implementation roadmap
+    ├── system-design-specification.md   # Technical architecture specification
+    ├── implementation-summary.md        # Design completion status
+    └── phases/                          # Phase-based implementation
+        ├── phase-1/                     # Phase 1: Workflow Foundation
+        │   ├── phase-1-workspace.md     # Detailed Phase 1 tasks
+        │   └── [artifacts]              # Implementation artifacts
+        ├── phase-2/                     # Phase 2: Gate System
+        ├── phase-3/                     # Phase 3: Envelope Processing
+        ├── phase-4/                     # Phase 4: Template Responses
+        └── phase-5/                     # Phase 5: Integration & Testing
+```
+
+### Implementation Guidelines
+
+#### Before Starting Work
+1. **Review Scratchpad**: Check current session status and previous progress
+2. **Update Session Info**: Set current phase, active task, and date
+3. **Check Dependencies**: Verify prerequisite tasks are complete
+
+#### During Implementation
+1. **Log Discoveries**: Document architecture patterns and code structure insights
+2. **Track Decisions**: Record technical choices and rationale
+3. **Note Issues**: Document problems encountered and solutions applied
+4. **Update Progress**: Mark completed tasks and update status
+
+#### After Completing Tasks
+1. **Update Scratchpad**: Mark tasks complete and note any follow-up actions
+2. **Session Summary**: Document key accomplishments and next steps
+3. **Risk Assessment**: Note any blocking issues or concerns for next session
+
+### Development Workflow Integration
+The scratchpad should be integrated with the existing development patterns:
+
+#### Hot-Reloading Development
+- Track file changes and their impact on the enhancement implementation
+- Document template modifications and their effects on workflow processing
+- Note any breaking changes during development
+
+#### Error Handling Enhancement
+- Log new error types introduced by workflow/gate/envelope processing
+- Document error boundaries and recovery mechanisms
+- Track testing of error conditions and edge cases
+
+#### Performance Monitoring
+- Note performance impact of new features during development
+- Document optimization opportunities and implementation decisions
+- Track memory usage and execution time changes
+
+### Cross-Session Continuity
+The scratchpad ensures smooth transitions between development sessions:
+
+#### Session Handoff Information
+- Current implementation state and blocking issues
+- Next priority tasks and their dependencies
+- Technical context that might not be obvious from code alone
+- Decisions made that affect future implementation phases
+
+This workflow ensures systematic progress tracking and maintains context across extended development sessions while integrating seamlessly with the existing MCP server architecture.
