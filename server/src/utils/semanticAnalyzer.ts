@@ -402,4 +402,11 @@ export class SemanticAnalyzer {
   getCageerfAnalysis(prompt: ConvertedPrompt): CAGEERFAnalysis {
     return this.cageerfAnalyzer.analyzePrompt(prompt);
   }
+  
+  /**
+   * Legacy alias for analyzePrompt - maintains backward compatibility
+   */
+  classifyPrompt(prompt: ConvertedPrompt, includeCageerfAnalysis: boolean = true): PromptClassification {
+    return this.analyzePrompt(prompt, includeCageerfAnalysis);
+  }
 }

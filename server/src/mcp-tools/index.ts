@@ -1503,6 +1503,7 @@ export class McpToolsManager {
   private registerListPrompts(): void {
     this.mcpServer.tool(
       "listprompts",
+      "📋 LIST AVAILABLE PROMPTS: Get a comprehensive list of all available prompts with intelligent filtering and category organization. Usage: >>listprompts [filter_text]",
       {
         command: z
           .string()

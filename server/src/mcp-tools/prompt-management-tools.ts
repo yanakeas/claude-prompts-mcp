@@ -232,6 +232,7 @@ export class PromptManagementTools {
   registerUpdatePrompt(): void {
     this.mcpServer.tool(
       "update_prompt",
+      "🔄 UPDATE PROMPT: Modify existing prompts with intelligent CAGEERF analysis and validation. Supports content updates, argument modifications, and category changes with semantic analysis.",
       {
         id: z.string().describe("Unique identifier for the prompt"),
         name: z.string().describe("Display name for the prompt"),
@@ -616,6 +617,7 @@ export class PromptManagementTools {
   registerDeletePrompt(): void {
     this.mcpServer.tool(
       "delete_prompt",
+      "🗑️ DELETE PROMPT: Remove prompts from the system with comprehensive validation and backup creation. Includes safety checks and category management.",
       {
         id: z.string().describe("Unique identifier for the prompt to delete"),
         fullServerRestart: z
@@ -877,6 +879,7 @@ export class PromptManagementTools {
   registerModifyPromptSection(): void {
     this.mcpServer.tool(
       "modify_prompt_section",
+      "✏️ MODIFY PROMPT SECTION: Update specific sections of prompts with precision editing and validation. Supports content modification, argument updates, and metadata changes.",
       {
         id: z.string().describe("Unique identifier of the prompt to modify"),
         section_name: z
@@ -996,6 +999,7 @@ export class PromptManagementTools {
   registerReloadPrompts(): void {
     this.mcpServer.tool(
       "reload_prompts",
+      "🔄 RELOAD PROMPTS: Refresh all prompts from disk with hot-reloading and system refresh. Supports full server restart or graceful reload modes.",
       {
         fullServerRestart: z
           .boolean()

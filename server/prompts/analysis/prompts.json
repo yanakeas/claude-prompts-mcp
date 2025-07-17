@@ -183,6 +183,45 @@
           "required": true
         }
       ]
+    },
+    {
+      "id": "analyze",
+      "name": "Analyze",
+      "category": "analysis",
+      "description": "Comprehensive analysis framework utilizing C.A.G.E.E.R.F methodology for structured examination of files, code, or content",
+      "file": "analyze.md",
+      "arguments": [
+        {
+          "name": "filebase",
+          "description": "The file, codebase, or content to analyze",
+          "required": true
+        },
+        {
+          "name": "query",
+          "description": "Specific questions or queries to guide the analysis",
+          "required": true
+        },
+        {
+          "name": "goals",
+          "description": "Analysis objectives and desired outcomes",
+          "required": true
+        },
+        {
+          "name": "targets",
+          "description": "Specific targets or focus areas for analysis",
+          "required": true
+        },
+        {
+          "name": "adjective",
+          "description": "Type qualifier for the analysis (e.g., technical, strategic, security)",
+          "required": true
+        },
+        {
+          "name": "target",
+          "description": "Primary analysis subject or domain",
+          "required": true
+        }
+      ]
     }
   ]
 }
