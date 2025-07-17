@@ -248,8 +248,11 @@ jobs:
                 const prompt = {
                   id: \`test-prompt-\${i}\`,
                   name: \`Test Prompt \${i + 1}\`,
-                  content: promptTypes[i].content,
-                  description: 'Test prompt for semantic analysis'
+                  userMessageTemplate: promptTypes[i].content,
+                  description: 'Test prompt for semantic analysis',
+                  category: 'test',
+                  arguments: [],
+                  systemMessage: 'Test system message for semantic analysis'
                 };
                 
                 try {

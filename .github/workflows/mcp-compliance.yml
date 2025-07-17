@@ -335,7 +335,7 @@ jobs:
           node -e "
             async function validateErrorHandling() {
               // Use dynamic imports for ES modules
-              const { utilsHandleError, MockLogger } = await import('./dist/utils/index.js');
+              const { handleError, MockLogger } = await import('./dist/utils/index.js');
               
               console.log('✅ Starting error handling validation');
               
@@ -353,7 +353,7 @@ jobs:
               
               for (let i = 0; i < testErrors.length; i++) {
                 try {
-                  const result = utilsHandleError(testErrors[i], 'test-context', logger);
+                  const result = handleError(testErrors[i], 'test-context', logger);
                   
                   if (!result || typeof result !== 'object') {
                     throw new Error('Invalid error handling result structure');
