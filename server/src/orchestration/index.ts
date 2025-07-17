@@ -663,16 +663,24 @@ ${attemptedPaths}
    * Phase 3: Initialize remaining modules with loaded data
    */
   private async initializeModulesPrivate(): Promise<void> {
+    // Check verbosity flags for conditional logging
+    const args = process.argv.slice(2);
+    const isVerbose = args.includes("--verbose") || args.includes("--debug-startup");
+    
     // Initialize gate evaluator (legacy)
+    if (isVerbose) this.logger.info("🔄 Initializing gate evaluator...");
     this.gateEvaluator = createGateEvaluator(this.logger);
     
     // Initialize enhanced gate evaluator (Phase 2)
+    if (isVerbose) this.logger.info("🔄 Initializing enhanced gate evaluator...");
     this.enhancedGateEvaluator = createEnhancedGateEvaluator(this.logger);
     
     // Initialize gate management tools
+    if (isVerbose) this.logger.info("🔄 Initializing gate management tools...");
     this.gateManagementTools = createGateManagementTools(this.logger, this.enhancedGateEvaluator);
     
     // Initialize prompt executor
+    if (isVerbose) this.logger.info("🔄 Initializing prompt executor...");
     this.promptExecutor = createPromptExecutor(
       this.logger,
       this.promptManager,
@@ -681,6 +689,7 @@ ${attemptedPaths}
     this.promptExecutor.updatePrompts(this._convertedPrompts);
     
     // Initialize workflow engine with enhanced gate evaluator
+    if (isVerbose) this.logger.info("🔄 Initializing workflow engine...");
     this.workflowEngine = createWorkflowEngine(
       this.logger,
       this.promptExecutor,
@@ -688,12 +697,15 @@ ${attemptedPaths}
     );
     
     // Set up cross-references
+    if (isVerbose) this.logger.info("🔄 Setting up cross-references...");
     this.promptExecutor.setWorkflowEngine(this.workflowEngine);
     
     // Register workflows from converted prompts
+    if (isVerbose) this.logger.info("🔄 Registering workflows...");
     await this.registerWorkflows();
 
     // Initialize MCP tools manager
+    if (isVerbose) this.logger.info("🔄 Initializing MCP tools manager...");
     this.mcpToolsManager = createMcpToolsManager(
       this.logger,
       this.mcpServer,
@@ -704,6 +716,7 @@ ${attemptedPaths}
     );
 
     // Update MCP tools manager with current data
+    if (isVerbose) this.logger.info("🔄 Updating MCP tools manager data...");
     this.mcpToolsManager.updateData(
       this._promptsData,
       this._convertedPrompts,
@@ -714,9 +727,11 @@ ${attemptedPaths}
     // this.mcpToolsManager.setGateManagementTools(this.gateManagementTools); // TODO: Add when gate management tools are implemented
 
     // Register all MCP tools
+    if (isVerbose) this.logger.info("🔄 Registering all MCP tools...");
     await this.mcpToolsManager.registerAllTools();
 
     // Register all prompts
+    if (isVerbose) this.logger.info("🔄 Registering all prompts...");
     await this.promptManager.registerAllPrompts(this._convertedPrompts);
 
     this.logger.info("All modules initialized successfully");

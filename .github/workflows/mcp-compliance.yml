@@ -109,8 +109,14 @@ jobs:
                 await orchestrator.loadPromptsData();
                 console.log('✅ Prompts data loaded successfully');
                 
-                // Test module initialization
-                await orchestrator.initializeModules();
+                // Test module initialization with timeout
+                console.log('🔍 Starting module initialization...');
+                const initializationPromise = orchestrator.initializeModules();
+                const timeoutPromise = new Promise((_, reject) => 
+                  setTimeout(() => reject(new Error('Module initialization timeout after 30 seconds')), 30000)
+                );
+                
+                await Promise.race([initializationPromise, timeoutPromise]);
                 console.log('✅ Modules initialized successfully');
                 
                 console.log('🎉 MCP server initialization validation successful!');
