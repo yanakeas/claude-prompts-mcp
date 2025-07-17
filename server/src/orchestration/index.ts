@@ -58,13 +58,13 @@ export class ApplicationOrchestrator {
   private mcpServer: McpServer;
 
   // Application data
-  private promptsData: PromptData[] = [];
-  private categories: Category[] = [];
-  private convertedPrompts: ConvertedPrompt[] = [];
+  private _promptsData: PromptData[] = [];
+  private _categories: Category[] = [];
+  private _convertedPrompts: ConvertedPrompt[] = [];
 
-  constructor() {
-    // Will be initialized in startup()
-    this.logger = null as any;
+  constructor(logger?: Logger) {
+    // Will be initialized in startup() if not provided
+    this.logger = logger || null as any;
     this.configManager = null as any;
     this.textReferenceManager = null as any;
     this.conversationManager = null as any;
@@ -91,7 +91,7 @@ export class ApplicationOrchestrator {
       await this.loadAndProcessData();
 
       // Phase 3: Module Initialization
-      await this.initializeModules();
+      await this.initializeModulesPrivate();
 
       // Phase 4: Server Setup and Startup
       await this.startServer();
@@ -107,6 +107,39 @@ export class ApplicationOrchestrator {
       }
       throw error;
     }
+  }
+
+  /**
+   * Public test methods for GitHub Actions compatibility
+   */
+  async loadConfiguration(): Promise<void> {
+    await this.initializeFoundation();
+  }
+
+  async loadPromptsData(): Promise<void> {
+    await this.loadAndProcessData();
+  }
+
+  // Make initializeModules public for testing
+  async initializeModules(): Promise<void> {
+    return this.initializeModulesPrivate();
+  }
+
+  // Expose data for testing
+  get config() {
+    return this.configManager?.getConfig();
+  }
+
+  get promptsData() {
+    return this._promptsData;
+  }
+
+  get convertedPrompts() {
+    return this._convertedPrompts;
+  }
+
+  get categories() {
+    return this._categories;
   }
 
   /**
@@ -547,23 +580,23 @@ ${attemptedPaths}
         path.dirname(PROMPTS_FILE)
       );
 
-      this.promptsData = result.promptsData;
-      this.categories = result.categories;
-      this.convertedPrompts = result.convertedPrompts;
+      this._promptsData = result.promptsData;
+      this._categories = result.categories;
+      this._convertedPrompts = result.convertedPrompts;
 
       this.logger.info("=== PROMPT LOADING RESULTS ===");
       this.logger.info(
-        `✓ Loaded ${this.promptsData.length} prompts from ${this.categories.length} categories`
+        `✓ Loaded ${this._promptsData.length} prompts from ${this._categories.length} categories`
       );
       this.logger.info(
-        `✓ Converted ${this.convertedPrompts.length} prompts to MCP format`
+        `✓ Converted ${this._convertedPrompts.length} prompts to MCP format`
       );
 
       // Log category breakdown
-      if (this.categories.length > 0) {
+      if (this._categories.length > 0) {
         this.logger.info("Categories loaded:");
-        this.categories.forEach((category) => {
-          const categoryPrompts = this.promptsData.filter(
+        this._categories.forEach((category) => {
+          const categoryPrompts = this._promptsData.filter(
             (p) => p.category === category.id
           );
           this.logger.info(
@@ -582,19 +615,19 @@ ${attemptedPaths}
       // but explicit updates ensure consistency after a hot-reload)
       if (this.mcpToolsManager) {
         this.mcpToolsManager.updateData(
-          this.promptsData,
-          this.convertedPrompts,
+          this._promptsData,
+          this._convertedPrompts,
           this.categories
         );
       }
       if (this.promptExecutor) {
-        this.promptExecutor.updatePrompts(this.convertedPrompts);
+        this.promptExecutor.updatePrompts(this._convertedPrompts);
       }
       if (this.apiManager) {
         // apiManager might not exist for stdio
         this.apiManager.updateData(
-          this.promptsData,
-          this.categories,
+          this._promptsData,
+          this._categories,
           this.convertedPrompts
         );
       }
@@ -629,7 +662,7 @@ ${attemptedPaths}
   /**
    * Phase 3: Initialize remaining modules with loaded data
    */
-  private async initializeModules(): Promise<void> {
+  private async initializeModulesPrivate(): Promise<void> {
     // Initialize gate evaluator (legacy)
     this.gateEvaluator = createGateEvaluator(this.logger);
     
@@ -645,7 +678,7 @@ ${attemptedPaths}
       this.promptManager,
       this.conversationManager
     );
-    this.promptExecutor.updatePrompts(this.convertedPrompts);
+    this.promptExecutor.updatePrompts(this._convertedPrompts);
     
     // Initialize workflow engine with enhanced gate evaluator
     this.workflowEngine = createWorkflowEngine(
@@ -672,8 +705,8 @@ ${attemptedPaths}
 
     // Update MCP tools manager with current data
     this.mcpToolsManager.updateData(
-      this.promptsData,
-      this.convertedPrompts,
+      this._promptsData,
+      this._convertedPrompts,
       this.categories
     );
 
@@ -684,7 +717,7 @@ ${attemptedPaths}
     await this.mcpToolsManager.registerAllTools();
 
     // Register all prompts
-    await this.promptManager.registerAllPrompts(this.convertedPrompts);
+    await this.promptManager.registerAllPrompts(this._convertedPrompts);
 
     this.logger.info("All modules initialized successfully");
   }
@@ -695,7 +728,7 @@ ${attemptedPaths}
   private async registerWorkflows(): Promise<void> {
     let workflowCount = 0;
     
-    for (const prompt of this.convertedPrompts) {
+    for (const prompt of this._convertedPrompts) {
       if (prompt.isWorkflow && prompt.workflowDefinition) {
         try {
           await this.workflowEngine.registerWorkflow(prompt.workflowDefinition);
@@ -742,8 +775,8 @@ ${attemptedPaths}
 
       // Update API manager with current data
       this.apiManager.updateData(
-        this.promptsData,
-        this.categories,
+        this._promptsData,
+        this._categories,
         this.convertedPrompts
       );
     }
@@ -801,13 +834,13 @@ ${attemptedPaths}
 
       // Step 2: Propagate the new data to all dependent modules.
       // This ensures all parts of the application are synchronized with the new state.
-      this.promptExecutor.updatePrompts(this.convertedPrompts);
+      this.promptExecutor.updatePrompts(this._convertedPrompts);
       this.logger.info("✅ PromptExecutor updated with new prompts.");
 
       if (this.mcpToolsManager) {
         this.mcpToolsManager.updateData(
-          this.promptsData,
-          this.convertedPrompts,
+          this._promptsData,
+          this._convertedPrompts,
           this.categories
         );
         this.logger.info("✅ McpToolsManager updated with new data.");
@@ -816,8 +849,8 @@ ${attemptedPaths}
       if (this.apiManager) {
         // The API manager is only available for the SSE transport.
         this.apiManager.updateData(
-          this.promptsData,
-          this.categories,
+          this._promptsData,
+          this._categories,
           this.convertedPrompts
         );
         this.logger.info("✅ ApiManager updated with new data.");
@@ -825,7 +858,7 @@ ${attemptedPaths}
 
       // Step 3: Re-register the newly loaded prompts with the running MCP server instance.
       // This makes the new/updated prompts available for execution immediately.
-      await this.promptManager.registerAllPrompts(this.convertedPrompts);
+      await this.promptManager.registerAllPrompts(this._convertedPrompts);
       this.logger.info("✅ Prompts re-registered with MCP Server.");
 
       // Step 4: Re-register workflows from updated prompts
@@ -873,8 +906,8 @@ ${attemptedPaths}
     return {
       running: this.serverManager?.isRunning() || false,
       transport: this.transportManager?.getTransportType(),
-      promptsLoaded: this.promptsData.length,
-      categoriesLoaded: this.categories.length,
+      promptsLoaded: this._promptsData.length,
+      categoriesLoaded: this._categories.length,
       serverStatus: this.serverManager?.getStatus(),
     };
   }
@@ -933,7 +966,7 @@ ${attemptedPaths}
 
     // Check data loading
     const dataLoaded =
-      this.promptsData.length > 0 && this.categories.length > 0;
+      this._promptsData.length > 0 && this._categories.length > 0;
     moduleStatus.dataLoaded = dataLoaded;
     if (!dataLoaded) {
       issues.push("Prompt data not loaded or empty");
@@ -982,8 +1015,8 @@ ${attemptedPaths}
         serverRunning: moduleStatus.serverRunning,
       },
       details: {
-        promptsLoaded: this.promptsData.length,
-        categoriesLoaded: this.categories.length,
+        promptsLoaded: this._promptsData.length,
+        categoriesLoaded: this._categories.length,
         serverStatus: this.serverManager?.getStatus(),
         moduleStatus,
       },
@@ -1019,8 +1052,8 @@ ${attemptedPaths}
         arch: process.arch,
       },
       application: {
-        promptsLoaded: this.promptsData.length,
-        categoriesLoaded: this.categories.length,
+        promptsLoaded: this._promptsData.length,
+        categoriesLoaded: this._categories.length,
         serverConnections: this.transportManager?.isSse()
           ? this.transportManager.getActiveConnectionsCount()
           : undefined,
@@ -1049,11 +1082,11 @@ ${attemptedPaths}
         errors.push("MCP Server instance not available");
       }
 
-      if (this.promptsData.length === 0) {
+      if (this._promptsData.length === 0) {
         errors.push("No prompts loaded");
       }
 
-      if (this.categories.length === 0) {
+      if (this._categories.length === 0) {
         errors.push("No categories loaded");
       }
 
