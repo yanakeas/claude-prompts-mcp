@@ -259,7 +259,7 @@ jobs:
                   const classification = semanticAnalyzer.classifyPrompt(prompt);
                   
                   // Validate classification structure
-                  if (!classification.executionType || !classification.confidence || !classification.reasoning) {
+                  if (!classification.executionType || classification.confidence === undefined || !classification.reasoning) {
                     throw new Error(\`Invalid classification structure for prompt \${i + 1}\`);
                   }
                   
