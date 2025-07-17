@@ -382,26 +382,35 @@ ${attemptedPaths}
   private async initializeFoundation(): Promise<void> {
     // Determine server root directory robustly
     const serverRoot = await this.determineServerRoot();
+    console.error("DEBUG: Server root detected:", serverRoot);
 
     // Initialize configuration manager using the detected server root
     const CONFIG_FILE = path.join(serverRoot, "config.json");
+    console.error("DEBUG: Config file path:", CONFIG_FILE);
     this.configManager = new ConfigManager(CONFIG_FILE);
+    console.error("DEBUG: ConfigManager created");
     await this.configManager.loadConfig();
+    console.error("DEBUG: Config loaded");
 
     // Determine transport from command line arguments
     const args = process.argv.slice(2);
+    console.error("DEBUG: Args:", args);
     const transport = TransportManager.determineTransport(
       args,
       this.configManager
     );
+    console.error("DEBUG: Transport determined:", transport);
 
     // Check verbosity flags for conditional logging
     const isVerbose =
       args.includes("--verbose") || args.includes("--debug-startup");
     const isQuiet = args.includes("--quiet");
+    console.error("DEBUG: Verbose:", isVerbose, "Quiet:", isQuiet);
 
     // Initialize logger with verbosity awareness
+    console.error("DEBUG: About to create logger");
     this.logger = createSimpleLogger(transport);
+    console.error("DEBUG: Logger created");
 
     // Only show startup messages if not in quiet mode
     if (!isQuiet) {
