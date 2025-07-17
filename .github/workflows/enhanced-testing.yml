@@ -78,23 +78,20 @@ jobs:
               console.log('🔍 Test 2: Health monitoring functionality');
               
               // Test health monitoring
-              const healthInfo = await orchestrator.collectHealthDiagnostics();
+              const healthInfo = await orchestrator.getDiagnosticInfo();
               if (!healthInfo || typeof healthInfo !== 'object') {
                 throw new Error('Health diagnostics failed');
               }
               console.log(\`✅ Health diagnostics collected: \${Object.keys(healthInfo).length} metrics\`);
               
-              console.log('🔍 Test 3: Graceful error handling');
+              console.log('🔍 Test 3: Application status validation');
               
-              // Test error handling
-              try {
-                // Simulate an error condition
-                await orchestrator.handleStartupFailure(new Error('Test error'));
-                console.log('✅ Error handling mechanism working');
-              } catch (error) {
-                // Expected to handle gracefully
-                console.log('✅ Error properly handled:', error.message.substring(0, 50));
+              // Test application status
+              const appStatus = orchestrator.getStatus();
+              if (!appStatus || typeof appStatus !== 'object') {
+                throw new Error('Application status validation failed');
               }
+              console.log(\`✅ Application status validated: \${Object.keys(appStatus).length} status metrics\`);
               
               console.log('🎉 Enhanced integration tests completed successfully');
             }
@@ -583,7 +580,7 @@ jobs:
               const initTime = Date.now() - startTime;
               
               // Health check
-              const health = await orchestrator.collectHealthDiagnostics();
+              const health = await orchestrator.getDiagnosticInfo();
               
               console.log('📊 Smoke Test Results:');
               console.log(\`   Initialization time: \${initTime}ms\`);

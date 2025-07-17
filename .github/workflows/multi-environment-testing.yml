@@ -635,7 +635,7 @@ jobs:
                 console.log('  Prompts loaded:', orchestrator.promptsData ? orchestrator.promptsData.length : 0);
                 
                 // Test health diagnostics
-                const health = await orchestrator.collectHealthDiagnostics();
+                const health = await orchestrator.getDiagnosticInfo();
                 console.log('  Health metrics:', Object.keys(health).length);
                 
                 // Performance thresholds for production
