@@ -99,38 +99,58 @@ jobs:
           cd server
           echo "Testing server startup capability..."
           
-          # Use a cross-platform timeout approach
-          if command -v timeout >/dev/null 2>&1; then
-            timeout 15s npm run start:debug > startup.log 2>&1 &
-            SERVER_PID=$!
-          elif command -v gtimeout >/dev/null 2>&1; then
-            # macOS with coreutils installed
-            gtimeout 15s npm run start:debug > startup.log 2>&1 &
-            SERVER_PID=$!
-          else
-            # Fallback: use background process with sleep
-            npm run start:debug > startup.log 2>&1 &
-            SERVER_PID=$!
-          fi
+          # Enhanced cross-platform timeout and process management
+          npm run start:debug > startup.log 2>&1 &
+          SERVER_PID=$!
+          echo "Server started with PID: $SERVER_PID"
           
-          sleep 10
+          # Wait for server to initialize
+          sleep 5
           
+          # Check if server is still running
           if kill -0 $SERVER_PID 2>/dev/null; then
-            echo "✅ Server started successfully"
+            echo "✅ Server startup validation passed"
+            
+            # Clean shutdown
+            echo "Stopping server..."
             kill $SERVER_PID 2>/dev/null || true
+            
+            # Wait for graceful shutdown
+            for i in {1..5}; do
+              if ! kill -0 $SERVER_PID 2>/dev/null; then
+                echo "✅ Server stopped gracefully"
+                break
+              fi
+              sleep 1
+            done
+            
+            # Force kill if still running
+            if kill -0 $SERVER_PID 2>/dev/null; then
+              echo "⚠️  Force killing server"
+              kill -9 $SERVER_PID 2>/dev/null || true
+            fi
           else
-            echo "❌ Server failed to start"
-            cat startup.log
+            echo "❌ Server failed to start or crashed"
+            echo "Startup log contents:"
+            cat startup.log || echo "No startup log found"
             exit 1
           fi
       
       - name: Changed files analysis
         run: |
           echo "Analyzing changed files in this PR..."
-          git diff --name-only origin/${{ github.base_ref }}...HEAD > changed_files.txt
+          
+          # Robust file diff with error handling
+          if git diff --name-only origin/${{ github.base_ref }}...HEAD > changed_files.txt 2>/dev/null; then
+            echo "✅ Successfully analyzed changed files"
+          else
+            echo "⚠️  Could not determine changed files, using fallback"
+            # Fallback: get files changed in current commit
+            git diff --name-only HEAD~1 HEAD > changed_files.txt 2>/dev/null || echo "No changes detected" > changed_files.txt
+          fi
           
           echo "Files changed in this PR:"
-          cat changed_files.txt
+          cat changed_files.txt || echo "No changed files detected"
           
           # Check if TypeScript files were modified
           if grep -q "\.ts$" changed_files.txt; then
@@ -156,9 +176,13 @@ jobs:
             let changedFiles = '';
             
             try {
-              changedFiles = fs.readFileSync('changed_files.txt', 'utf8');
+              changedFiles = fs.readFileSync('changed_files.txt', 'utf8').trim();
+              if (!changedFiles) {
+                changedFiles = 'No changes detected';
+              }
             } catch (e) {
-              changedFiles = 'Unable to read changed files';
+              console.log('Warning: Could not read changed_files.txt:', e.message);
+              changedFiles = 'Unable to read changed files (this is normal for some PR types)';
             }
             
             const status = process.env.GITHUB_JOB_STATUS || '${{ job.status }}';

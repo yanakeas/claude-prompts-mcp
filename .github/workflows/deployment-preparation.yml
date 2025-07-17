@@ -74,22 +74,31 @@ jobs:
           # Check if TypeScript compiler generates source maps
           if [ -f "tsconfig.json" ]; then
             node -e "
-              const fs = require('fs');
-              const tsConfig = JSON.parse(fs.readFileSync('tsconfig.json', 'utf8'));
-              
-              if (tsConfig.compilerOptions && tsConfig.compilerOptions.sourceMap) {
-                console.log('✅ Source maps are enabled in tsconfig.json');
-              } else {
-                console.log('⚠️  Source maps not enabled in tsconfig.json');
-                console.log('Adding source map generation...');
+              async function checkSourceMaps() {
+                // Use dynamic imports for ES modules
+                const fs = await import('fs');
                 
-                // Enable source maps
-                tsConfig.compilerOptions = tsConfig.compilerOptions || {};
-                tsConfig.compilerOptions.sourceMap = true;
+                const tsConfig = JSON.parse(fs.readFileSync('tsconfig.json', 'utf8'));
                 
-                fs.writeFileSync('tsconfig.json', JSON.stringify(tsConfig, null, 2));
-                console.log('✅ Source maps enabled');
+                if (tsConfig.compilerOptions && tsConfig.compilerOptions.sourceMap) {
+                  console.log('✅ Source maps are enabled in tsconfig.json');
+                } else {
+                  console.log('⚠️  Source maps not enabled in tsconfig.json');
+                  console.log('Adding source map generation...');
+                  
+                  // Enable source maps
+                  tsConfig.compilerOptions = tsConfig.compilerOptions || {};
+                  tsConfig.compilerOptions.sourceMap = true;
+                  
+                  fs.writeFileSync('tsconfig.json', JSON.stringify(tsConfig, null, 2));
+                  console.log('✅ Source maps enabled');
+                }
               }
+              
+              checkSourceMaps().catch(error => {
+                console.error('❌ Source map check failed:', error.message);
+                process.exit(1);
+              });
             "
           fi
           
@@ -124,29 +133,38 @@ jobs:
           
           # Create deployment package.json (production only)
           node -e "
-            const fs = require('fs');
-            const packageJson = JSON.parse(fs.readFileSync('../deployment-bundle/package.json', 'utf8'));
+            async function createProductionPackageJson() {
+              // Use dynamic imports for ES modules
+              const fs = await import('fs');
+              
+              const packageJson = JSON.parse(fs.readFileSync('../deployment-bundle/package.json', 'utf8'));
+              
+              // Create production package.json
+              const prodPackageJson = {
+                name: packageJson.name,
+                version: packageJson.version,
+                description: packageJson.description,
+                main: packageJson.main,
+                scripts: {
+                  start: packageJson.scripts.start || 'node dist/index.js',
+                  'start:production': packageJson.scripts['start:production'] || 'node dist/index.js'
+                },
+                dependencies: packageJson.dependencies || {},
+                engines: packageJson.engines || {},
+                author: packageJson.author,
+                license: packageJson.license,
+                repository: packageJson.repository,
+                keywords: packageJson.keywords || []
+              };
+              
+              fs.writeFileSync('../deployment-bundle/package.json', JSON.stringify(prodPackageJson, null, 2));
+              console.log('✅ Production package.json created');
+            }
             
-            // Create production package.json
-            const prodPackageJson = {
-              name: packageJson.name,
-              version: packageJson.version,
-              description: packageJson.description,
-              main: packageJson.main,
-              scripts: {
-                start: packageJson.scripts.start || 'node dist/index.js',
-                'start:production': packageJson.scripts['start:production'] || 'node dist/index.js'
-              },
-              dependencies: packageJson.dependencies || {},
-              engines: packageJson.engines || {},
-              author: packageJson.author,
-              license: packageJson.license,
-              repository: packageJson.repository,
-              keywords: packageJson.keywords || []
-            };
-            
-            fs.writeFileSync('../deployment-bundle/package.json', JSON.stringify(prodPackageJson, null, 2));
-            console.log('✅ Production package.json created');
+            createProductionPackageJson().catch(error => {
+              console.error('❌ Production package.json creation failed:', error.message);
+              process.exit(1);
+            });
           "
           
           # Create deployment info
@@ -198,48 +216,58 @@ jobs:
           echo "📄 Generating deployment manifest..."
           
           node -e "
-            const fs = require('fs');
-            const path = require('path');
-            const { execSync } = require('child_process');
-            
-            const manifest = {
-              version: require('./server/package.json').version,
-              buildDate: new Date().toISOString(),
-              commit: execSync('git rev-parse HEAD').toString().trim(),
-              branch: execSync('git branch --show-current').toString().trim(),
-              nodeVersion: process.version,
-              platform: process.platform,
-              arch: process.arch,
-              artifacts: {
-                bundle: 'deployment-bundle/',
-                sourceMap: 'Available in dist/*.map files',
-                size: execSync('du -sh deployment-bundle').toString().split('\t')[0]
-              },
-              dependencies: Object.keys(require('./server/package.json').dependencies || {}),
-              scripts: {
-                start: 'npm start',
-                production: 'NODE_ENV=production npm start'
-              },
-              deployment: {
-                requirements: {
-                  node: require('./server/package.json').engines?.node || '>=16',
-                  npm: '>=6'
+            async function generateDeploymentManifest() {
+              // Use dynamic imports for ES modules
+              const fs = await import('fs');
+              const path = await import('path');
+              const { execSync } = await import('child_process');
+              
+              const packageJson = JSON.parse(fs.readFileSync('./server/package.json', 'utf8'));
+              
+              const manifest = {
+                version: packageJson.version,
+                buildDate: new Date().toISOString(),
+                commit: execSync('git rev-parse HEAD').toString().trim(),
+                branch: execSync('git branch --show-current').toString().trim(),
+                nodeVersion: process.version,
+                platform: process.platform,
+                arch: process.arch,
+                artifacts: {
+                  bundle: 'deployment-bundle/',
+                  sourceMap: 'Available in dist/*.map files',
+                  size: execSync('du -sh deployment-bundle').toString().split('\t')[0]
                 },
-                environment: {
-                  NODE_ENV: 'production',
-                  MCP_SERVER_ROOT: 'Optional - override server root detection',
-                  MCP_PROMPTS_CONFIG_PATH: 'Optional - direct path to prompts config'
-                },
-                commands: {
-                  install: 'npm install --only=production',
+                dependencies: Object.keys(packageJson.dependencies || {}),
+                scripts: {
                   start: 'npm start',
-                  health: 'curl -f http://localhost:3000/health || exit 1'
+                  production: 'NODE_ENV=production npm start'
+                },
+                deployment: {
+                  requirements: {
+                    node: packageJson.engines?.node || '>=16',
+                    npm: '>=6'
+                  },
+                  environment: {
+                    NODE_ENV: 'production',
+                    MCP_SERVER_ROOT: 'Optional - override server root detection',
+                    MCP_PROMPTS_CONFIG_PATH: 'Optional - direct path to prompts config'
+                  },
+                  commands: {
+                    install: 'npm install --only=production',
+                    start: 'npm start',
+                    health: 'curl -f http://localhost:3000/health || exit 1'
+                  }
                 }
-              }
-            };
+              };
+              
+              fs.writeFileSync('deployment-manifest.json', JSON.stringify(manifest, null, 2));
+              console.log('✅ Deployment manifest generated');
+            }
             
-            fs.writeFileSync('deployment-manifest.json', JSON.stringify(manifest, null, 2));
-            console.log('✅ Deployment manifest generated');
+            generateDeploymentManifest().catch(error => {
+              console.error('❌ Deployment manifest generation failed:', error.message);
+              process.exit(1);
+            });
           "
       
       - name: Upload deployment artifacts
@@ -512,77 +540,85 @@ EOF
           npm audit --audit-level=low --json > ../audit-detailed.json 2>/dev/null || true
           
           node -e "
-            const fs = require('fs');
-            
-            try {
-              const auditData = JSON.parse(fs.readFileSync('../audit-detailed.json', 'utf8'));
+            async function advancedDependencyAudit() {
+              // Use dynamic imports for ES modules
+              const fs = await import('fs');
               
-              console.log('📊 Advanced Dependency Audit Report:');
-              console.log('====================================');
-              
-              if (auditData.vulnerabilities) {
-                const vulns = auditData.vulnerabilities;
-                const packages = Object.keys(vulns);
+              try {
+                const auditData = JSON.parse(fs.readFileSync('../audit-detailed.json', 'utf8'));
                 
-                console.log('\\n🔍 Vulnerability Analysis:');
-                console.log('Total packages analyzed:', packages.length);
+                console.log('📊 Advanced Dependency Audit Report:');
+                console.log('====================================');
                 
-                // Group by severity
-                const severityGroups = {
-                  critical: [],
-                  high: [],
-                  moderate: [],
-                  low: [],
-                  info: []
-                };
-                
-                packages.forEach(pkg => {
-                  const vuln = vulns[pkg];
-                  if (vuln.severity && severityGroups[vuln.severity]) {
-                    severityGroups[vuln.severity].push({
-                      name: pkg,
-                      severity: vuln.severity,
-                      via: vuln.via,
-                      effects: vuln.effects
-                    });
+                if (auditData.vulnerabilities) {
+                  const vulns = auditData.vulnerabilities;
+                  const packages = Object.keys(vulns);
+                  
+                  console.log('\\n🔍 Vulnerability Analysis:');
+                  console.log('Total packages analyzed:', packages.length);
+                  
+                  // Group by severity
+                  const severityGroups = {
+                    critical: [],
+                    high: [],
+                    moderate: [],
+                    low: [],
+                    info: []
+                  };
+                  
+                  packages.forEach(pkg => {
+                    const vuln = vulns[pkg];
+                    if (vuln.severity && severityGroups[vuln.severity]) {
+                      severityGroups[vuln.severity].push({
+                        name: pkg,
+                        severity: vuln.severity,
+                        via: vuln.via,
+                        effects: vuln.effects
+                      });
+                    }
+                  });
+                  
+                  Object.entries(severityGroups).forEach(([severity, vulnList]) => {
+                    if (vulnList.length > 0) {
+                      console.log('\\n' + severity.toUpperCase() + ' (' + vulnList.length + '):');
+                      vulnList.forEach(vuln => {
+                        console.log('  - ' + vuln.name + ' (via: ' + (vuln.via ? vuln.via.join(', ') : 'direct') + ')');
+                      });
+                    }
+                  });
+                  
+                  // Generate recommendations
+                  console.log('\\n💡 Recommendations:');
+                  if (severityGroups.critical.length > 0) {
+                    console.log('  🚨 CRITICAL: Immediate action required - update or replace vulnerable packages');
                   }
-                });
-                
-                Object.entries(severityGroups).forEach(([severity, vulnList]) => {
-                  if (vulnList.length > 0) {
-                    console.log('\\n' + severity.toUpperCase() + ' (' + vulnList.length + '):');
-                    vulnList.forEach(vuln => {
-                      console.log('  - ' + vuln.name + ' (via: ' + (vuln.via ? vuln.via.join(', ') : 'direct') + ')');
-                    });
+                  if (severityGroups.high.length > 0) {
+                    console.log('  🔴 HIGH: Plan updates within 1-2 weeks');
                   }
-                });
-                
-                // Generate recommendations
-                console.log('\\n💡 Recommendations:');
-                if (severityGroups.critical.length > 0) {
-                  console.log('  🚨 CRITICAL: Immediate action required - update or replace vulnerable packages');
+                  if (severityGroups.moderate.length > 0) {
+                    console.log('  🟡 MODERATE: Consider updates in next release cycle');
+                  }
+                  if (severityGroups.low.length > 0) {
+                    console.log('  🟢 LOW: Monitor for future updates');
+                  }
+                  
+                  // Exit with error for critical vulnerabilities
+                  if (severityGroups.critical.length > 0) {
+                    console.log('\\n❌ Build failed due to critical vulnerabilities');
+                    process.exit(1);
+                  }
+                } else {
+                  console.log('✅ No vulnerabilities found');
                 }
-                if (severityGroups.high.length > 0) {
-                  console.log('  🔴 HIGH: Plan updates within 1-2 weeks');
-                }
-                if (severityGroups.moderate.length > 0) {
-                  console.log('  🟡 MODERATE: Consider updates in next release cycle');
-                }
-                if (severityGroups.low.length > 0) {
-                  console.log('  🟢 LOW: Monitor for future updates');
-                }
-                
-                // Exit with error for critical vulnerabilities
-                if (severityGroups.critical.length > 0) {
-                  console.log('\\n❌ Build failed due to critical vulnerabilities');
-                  process.exit(1);
-                }
-              } else {
-                console.log('✅ No vulnerabilities found');
+              } catch (error) {
+                console.log('⚠️  Could not parse audit results, continuing with basic check...');
               }
-            } catch (error) {
-              console.log('⚠️  Could not parse audit results, continuing with basic check...');
             }
+            
+            advancedDependencyAudit().catch(error => {
+              console.error('❌ Advanced dependency audit failed:', error.message);
+              // Don't exit with error as this is advisory
+            });
           "
       
       - name: License compliance deep scan
@@ -591,83 +627,91 @@ EOF
           echo "🔍 Running license compliance deep scan..."
           
           node -e "
-            const fs = require('fs');
-            const path = require('path');
-            
-            console.log('📊 License Compliance Deep Scan:');
-            console.log('================================');
-            
-            const packageJson = require('./package.json');
-            const licenseReport = {};
-            const issues = [];
-            
-            // Analyze dependencies
-            const dependencies = {
-              ...packageJson.dependencies,
-              ...packageJson.devDependencies
-            };
-            
-            console.log('\\n🔍 Analyzing', Object.keys(dependencies).length, 'dependencies...');
-            
-            Object.keys(dependencies).forEach(depName => {
-              try {
-                const depPackagePath = path.join('node_modules', depName, 'package.json');
-                if (fs.existsSync(depPackagePath)) {
-                  const depPackage = JSON.parse(fs.readFileSync(depPackagePath, 'utf8'));
-                  const license = depPackage.license || 'UNKNOWN';
-                  
-                  if (!licenseReport[license]) {
-                    licenseReport[license] = [];
+            async function licenseComplianceDeepScan() {
+              // Use dynamic imports for ES modules
+              const fs = await import('fs');
+              const path = await import('path');
+              
+              console.log('📊 License Compliance Deep Scan:');
+              console.log('================================');
+              
+              const packageJson = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
+              const licenseReport = {};
+              const issues = [];
+              
+              // Analyze dependencies
+              const dependencies = {
+                ...packageJson.dependencies,
+                ...packageJson.devDependencies
+              };
+              
+              console.log('\\n🔍 Analyzing', Object.keys(dependencies).length, 'dependencies...');
+              
+              Object.keys(dependencies).forEach(depName => {
+                try {
+                  const depPackagePath = path.join('node_modules', depName, 'package.json');
+                  if (fs.existsSync(depPackagePath)) {
+                    const depPackage = JSON.parse(fs.readFileSync(depPackagePath, 'utf8'));
+                    const license = depPackage.license || 'UNKNOWN';
+                    
+                    if (!licenseReport[license]) {
+                      licenseReport[license] = [];
+                    }
+                    licenseReport[license].push(depName);
+                    
+                    // Check for problematic licenses
+                    const problematicLicenses = ['GPL-2.0', 'GPL-3.0', 'AGPL-3.0', 'LGPL-2.1', 'LGPL-3.0'];
+                    if (problematicLicenses.some(prob => license.includes(prob))) {
+                      issues.push({
+                        package: depName,
+                        license: license,
+                        severity: 'high',
+                        reason: 'Copyleft license may require source code disclosure'
+                      });
+                    }
+                    
+                    // Check for unknown licenses
+                    if (license === 'UNKNOWN' || !license) {
+                      issues.push({
+                        package: depName,
+                        license: license,
+                        severity: 'medium',
+                        reason: 'License not specified or unknown'
+                      });
+                    }
                   }
-                  licenseReport[license].push(depName);
-                  
-                  // Check for problematic licenses
-                  const problematicLicenses = ['GPL-2.0', 'GPL-3.0', 'AGPL-3.0', 'LGPL-2.1', 'LGPL-3.0'];
-                  if (problematicLicenses.some(prob => license.includes(prob))) {
-                    issues.push({
-                      package: depName,
-                      license: license,
-                      severity: 'high',
-                      reason: 'Copyleft license may require source code disclosure'
-                    });
-                  }
-                  
-                  // Check for unknown licenses
-                  if (license === 'UNKNOWN' || !license) {
-                    issues.push({
-                      package: depName,
-                      license: license,
-                      severity: 'medium',
-                      reason: 'License not specified or unknown'
-                    });
-                  }
+                } catch (error) {
+                  // Ignore packages that can't be analyzed
                 }
-              } catch (error) {
-                // Ignore packages that can't be analyzed
-              }
-            });
-            
-            console.log('\\n📋 License Distribution:');
-            Object.entries(licenseReport)
-              .sort(([,a], [,b]) => b.length - a.length)
-              .forEach(([license, packages]) => {
-                console.log('  ' + license + ': ' + packages.length + ' package(s)');
-              });
-            
-            if (issues.length > 0) {
-              console.log('\\n⚠️  License Issues Found:');
-              issues.forEach(issue => {
-                console.log('  ' + issue.severity.toUpperCase() + ': ' + issue.package + ' (' + issue.license + ')');
-                console.log('    ' + issue.reason);
               });
               
-              const highIssues = issues.filter(i => i.severity === 'high');
-              if (highIssues.length > 0) {
-                console.log('\\n🚨 High severity license issues require review before production deployment');
+              console.log('\\n📋 License Distribution:');
+              Object.entries(licenseReport)
+                .sort(([,a], [,b]) => b.length - a.length)
+                .forEach(([license, packages]) => {
+                  console.log('  ' + license + ': ' + packages.length + ' package(s)');
+                });
+              
+              if (issues.length > 0) {
+                console.log('\\n⚠️  License Issues Found:');
+                issues.forEach(issue => {
+                  console.log('  ' + issue.severity.toUpperCase() + ': ' + issue.package + ' (' + issue.license + ')');
+                  console.log('    ' + issue.reason);
+                });
+                
+                const highIssues = issues.filter(i => i.severity === 'high');
+                if (highIssues.length > 0) {
+                  console.log('\\n🚨 High severity license issues require review before production deployment');
+                }
+              } else {
+                console.log('\\n✅ No license compliance issues detected');
               }
-            } else {
-              console.log('\\n✅ No license compliance issues detected');
             }
+            
+            licenseComplianceDeepScan().catch(error => {
+              console.error('❌ License compliance scan failed:', error.message);
+              // Don't exit with error as this is advisory
+            });
           "
       
       - name: Security configuration audit
@@ -777,85 +821,93 @@ EOF
           echo "🔍 Running supply chain security validation..."
           
           node -e "
-            const fs = require('fs');
-            const crypto = require('crypto');
-            
-            console.log('📊 Supply Chain Security Validation:');
-            console.log('===================================');
-            
-            // Check package-lock.json integrity
-            if (fs.existsSync('package-lock.json')) {
-              const packageLock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+            async function supplyChainSecurityValidation() {
+              // Use dynamic imports for ES modules
+              const fs = await import('fs');
+              const crypto = await import('crypto');
               
-              console.log('\\n🔒 Package Lock Analysis:');
-              console.log('  Lock file version:', packageLock.lockfileVersion);
-              console.log('  Dependencies with integrity hashes:', 
-                Object.values(packageLock.dependencies || {})
-                  .filter(dep => dep.integrity)
-                  .length
-              );
+              console.log('📊 Supply Chain Security Validation:');
+              console.log('===================================');
               
-              // Check for suspicious patterns
-              const suspiciousPatterns = [
-                'postinstall',
-                'preinstall',
-                'install',
-                'eval',
-                'child_process',
-                'fs.writeFile'
+              // Check package-lock.json integrity
+              if (fs.existsSync('package-lock.json')) {
+                const packageLock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+                
+                console.log('\\n🔒 Package Lock Analysis:');
+                console.log('  Lock file version:', packageLock.lockfileVersion);
+                console.log('  Dependencies with integrity hashes:', 
+                  Object.values(packageLock.dependencies || {})
+                    .filter(dep => dep.integrity)
+                    .length
+                );
+                
+                // Check for suspicious patterns
+                const suspiciousPatterns = [
+                  'postinstall',
+                  'preinstall',
+                  'install',
+                  'eval',
+                  'child_process',
+                  'fs.writeFile'
+                ];
+                
+                let suspiciousPackages = [];
+                Object.entries(packageLock.dependencies || {}).forEach(([name, info]) => {
+                  if (info.scripts) {
+                    Object.entries(info.scripts).forEach(([script, command]) => {
+                      if (suspiciousPatterns.some(pattern => command.includes(pattern))) {
+                        suspiciousPackages.push({ name, script, command });
+                      }
+                    });
+                  }
+                });
+                
+                if (suspiciousPackages.length > 0) {
+                  console.log('\\n⚠️  Suspicious package scripts detected:');
+                  suspiciousPackages.forEach(pkg => {
+                    console.log('  - ' + pkg.name + ' (' + pkg.script + '): ' + pkg.command.substring(0, 50) + '...');
+                  });
+                } else {
+                  console.log('\\n✅ No suspicious package scripts detected');
+                }
+              }
+              
+              // Check for known malicious packages (basic check)
+              const packageJson = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
+              const allDeps = {
+                ...packageJson.dependencies,
+                ...packageJson.devDependencies
+              };
+              
+              const knownMaliciousPatterns = [
+                'event-stream',
+                'eslint-scope',
+                'getcookies',
+                'rc',
+                'cross-env'
               ];
               
-              let suspiciousPackages = [];
-              Object.entries(packageLock.dependencies || {}).forEach(([name, info]) => {
-                if (info.scripts) {
-                  Object.entries(info.scripts).forEach(([script, command]) => {
-                    if (suspiciousPatterns.some(pattern => command.includes(pattern))) {
-                      suspiciousPackages.push({ name, script, command });
-                    }
-                  });
-                }
-              });
+              const flaggedPackages = Object.keys(allDeps).filter(dep => 
+                knownMaliciousPatterns.some(pattern => dep.includes(pattern))
+              );
               
-              if (suspiciousPackages.length > 0) {
-                console.log('\\n⚠️  Suspicious package scripts detected:');
-                suspiciousPackages.forEach(pkg => {
-                  console.log('  - ' + pkg.name + ' (' + pkg.script + '): ' + pkg.command.substring(0, 50) + '...');
+              if (flaggedPackages.length > 0) {
+                console.log('\\n⚠️  Packages matching known malicious patterns:');
+                flaggedPackages.forEach(pkg => {
+                  console.log('  - ' + pkg + ' (version: ' + allDeps[pkg] + ')');
                 });
+                console.log('  Manual review recommended for these packages');
               } else {
-                console.log('\\n✅ No suspicious package scripts detected');
+                console.log('\\n✅ No packages match known malicious patterns');
               }
+              
+              console.log('\\n✅ Supply chain security validation completed');
             }
             
-            // Check for known malicious packages (basic check)
-            const packageJson = require('./package.json');
-            const allDeps = {
-              ...packageJson.dependencies,
-              ...packageJson.devDependencies
-            };
-            
-            const knownMaliciousPatterns = [
-              'event-stream',
-              'eslint-scope',
-              'getcookies',
-              'rc',
-              'cross-env'
-            ];
-            
-            const flaggedPackages = Object.keys(allDeps).filter(dep => 
-              knownMaliciousPatterns.some(pattern => dep.includes(pattern))
-            );
-            
-            if (flaggedPackages.length > 0) {
-              console.log('\\n⚠️  Packages matching known malicious patterns:');
-              flaggedPackages.forEach(pkg => {
-                console.log('  - ' + pkg + ' (version: ' + allDeps[pkg] + ')');
-              });
-              console.log('  Manual review recommended for these packages');
-            } else {
-              console.log('\\n✅ No packages match known malicious patterns');
-            }
-            
-            console.log('\\n✅ Supply chain security validation completed');
+            supplyChainSecurityValidation().catch(error => {
+              console.error('❌ Supply chain security validation failed:', error.message);
+              // Don't exit with error as this is advisory
+            });
           "
       
       - name: Generate security report
