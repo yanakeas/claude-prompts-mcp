@@ -97,11 +97,11 @@ jobs:
           echo "🔍 Testing server startup performance..."
           
           node -e "
-            const { ApplicationOrchestrator } = require('./dist/orchestration/index.js');
-            const { MockLogger } = require('./dist/utils/index.js');
-            const fs = require('fs');
-            
             async function startupPerformanceTest() {
+              // Use dynamic imports for ES modules
+              const { ApplicationOrchestrator } = await import('./dist/orchestration/index.js');
+              const { MockLogger } = await import('./dist/utils/index.js');
+              const fs = require('fs');
               const results = {};
               const logger = new MockLogger();
               
@@ -160,13 +160,15 @@ jobs:
           echo "🔍 Testing CAGEERF framework performance..."
           
           node -e "
-            const { CAGEERFAnalyzer } = require('./dist/utils/cageerf-analyzer.js');
-            const { TemplateGenerator } = require('./dist/utils/template-generator.js');
-            const { SemanticAnalyzer } = require('./dist/utils/semanticAnalyzer.js');
-            const { MockLogger } = require('./dist/utils/index.js');
-            const fs = require('fs');
-            
-            const results = {};
+            async function runCageerfPerformanceTest() {
+              // Use dynamic imports for ES modules
+              const { CAGEERFAnalyzer } = await import('./dist/utils/cageerf-analyzer.js');
+              const { TemplateGenerator } = await import('./dist/utils/template-generator.js');
+              const { SemanticAnalyzer } = await import('./dist/utils/semanticAnalyzer.js');
+              const { MockLogger } = await import('./dist/utils/index.js');
+              const fs = require('fs');
+              
+              const results = {};
             
             // Test prompts of varying complexity
             const testPrompts = [
@@ -246,6 +248,12 @@ jobs:
             fs.writeFileSync('../performance-results/cageerf.txt', resultsText);
             
             console.log('✅ CAGEERF framework performance test completed');
+            }
+            
+            runCageerfPerformanceTest().catch(error => {
+              console.error('❌ CAGEERF performance test failed:', error);
+              process.exit(1);
+            });
           "
       
       - name: Run Memory Usage Test
@@ -254,13 +262,13 @@ jobs:
           echo "🔍 Testing memory usage patterns..."
           
           node -e "
-            const { ApplicationOrchestrator } = require('./dist/orchestration/index.js');
-            const { CAGEERFAnalyzer } = require('./dist/utils/cageerf-analyzer.js');
-            const { TemplateGenerator } = require('./dist/utils/template-generator.js');
-            const { MockLogger } = require('./dist/utils/index.js');
-            const fs = require('fs');
-            
             async function memoryTest() {
+              // Use dynamic imports for ES modules
+              const { ApplicationOrchestrator } = await import('./dist/orchestration/index.js');
+              const { CAGEERFAnalyzer } = await import('./dist/utils/cageerf-analyzer.js');
+              const { TemplateGenerator } = await import('./dist/utils/template-generator.js');
+              const { MockLogger } = await import('./dist/utils/index.js');
+              const fs = require('fs');
               const results = {};
               
               // Baseline memory

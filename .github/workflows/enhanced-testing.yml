@@ -48,10 +48,10 @@ jobs:
           echo "🧪 Running enhanced MCP server integration tests..."
           
           node -e "
-            const { ApplicationOrchestrator } = require('./dist/orchestration/index.js');
-            const { MockLogger } = require('./dist/utils/index.js');
-            
             async function enhancedIntegrationTests() {
+              // Use dynamic imports for ES modules
+              const { ApplicationOrchestrator } = await import('./dist/orchestration/index.js');
+              const { MockLogger } = await import('./dist/utils/index.js');
               console.log('🔍 Test 1: Full server initialization sequence');
               
               const logger = new MockLogger();
@@ -112,13 +112,13 @@ jobs:
           echo "🧪 Running comprehensive CAGEERF framework tests..."
           
           node -e "
-            const { CAGEERFAnalyzer } = require('./dist/utils/cageerf-analyzer.js');
-            const { TemplateGenerator } = require('./dist/utils/template-generator.js');
-            const { TemplateRepositoryBuilder } = require('./dist/utils/template-repository.js');
-            const { SemanticAnalyzer } = require('./dist/utils/semanticAnalyzer.js');
-            const { MockLogger } = require('./dist/utils/index.js');
-            
-            function comprehensiveFrameworkTests() {
+            async function comprehensiveFrameworkTests() {
+              // Use dynamic imports for ES modules
+              const { CAGEERFAnalyzer } = await import('./dist/utils/cageerf-analyzer.js');
+              const { TemplateGenerator } = await import('./dist/utils/template-generator.js');
+              const { TemplateRepositoryBuilder } = await import('./dist/utils/template-repository.js');
+              const { SemanticAnalyzer } = await import('./dist/utils/semanticAnalyzer.js');
+              const { MockLogger } = await import('./dist/utils/index.js');
               console.log('🔍 Test 1: CAGEERF Analyzer edge cases');
               
               const analyzer = new CAGEERFAnalyzer();
@@ -276,12 +276,10 @@ jobs:
               console.log('🎉 Comprehensive CAGEERF framework tests completed successfully');
             }
             
-            try {
-              comprehensiveFrameworkTests();
-            } catch (error) {
+            comprehensiveFrameworkTests().catch(error => {
               console.error('❌ CAGEERF framework tests failed:', error.message);
               process.exit(1);
-            }
+            });
           "
       
       - name: MCP Tools Comprehensive Tests
@@ -290,11 +288,11 @@ jobs:
           echo "🧪 Running comprehensive MCP tools tests..."
           
           node -e "
-            const { McpToolsManager } = require('./dist/mcp-tools/index.js');
-            const { TemplateGenerationTools } = require('./dist/mcp-tools/template-generation-tools.js');
-            const { MockLogger } = require('./dist/utils/index.js');
-            
-            function comprehensiveMcpToolsTests() {
+            async function comprehensiveMcpToolsTests() {
+              // Use dynamic imports for ES modules
+              const { McpToolsManager } = await import('./dist/mcp-tools/index.js');
+              const { TemplateGenerationTools } = await import('./dist/mcp-tools/template-generation-tools.js');
+              const { MockLogger } = await import('./dist/utils/index.js');
               console.log('🔍 Test 1: MCP Tools Manager complete functionality');
               
               const toolCalls = [];
@@ -408,12 +406,10 @@ jobs:
               console.log('🎉 Comprehensive MCP tools tests completed successfully');
             }
             
-            try {
-              comprehensiveMcpToolsTests();
-            } catch (error) {
+            comprehensiveMcpToolsTests().catch(error => {
               console.error('❌ MCP tools tests failed:', error.message);
               process.exit(1);
-            }
+            });
           "
       
       - name: Error Handling and Edge Cases Tests
@@ -422,12 +418,12 @@ jobs:
           echo "🧪 Running error handling and edge case tests..."
           
           node -e "
-            const { ApplicationOrchestrator } = require('./dist/orchestration/index.js');
-            const { CAGEERFAnalyzer } = require('./dist/utils/cageerf-analyzer.js');
-            const { TemplateGenerator } = require('./dist/utils/template-generator.js');
-            const { MockLogger } = require('./dist/utils/index.js');
-            
-            function errorHandlingTests() {
+            async function errorHandlingTests() {
+              // Use dynamic imports for ES modules
+              const { ApplicationOrchestrator } = await import('./dist/orchestration/index.js');
+              const { CAGEERFAnalyzer } = await import('./dist/utils/cageerf-analyzer.js');
+              const { TemplateGenerator } = await import('./dist/utils/template-generator.js');
+              const { MockLogger } = await import('./dist/utils/index.js');
               console.log('🔍 Test 1: Graceful error handling');
               
               const logger = new MockLogger();
@@ -568,10 +564,10 @@ jobs:
           echo "🧪 Running integration smoke tests..."
           
           node -e "
-            const { ApplicationOrchestrator } = require('./dist/orchestration/index.js');
-            const { MockLogger } = require('./dist/utils/index.js');
-            
             async function smokeTests() {
+              // Use dynamic imports for ES modules
+              const { ApplicationOrchestrator } = await import('./dist/orchestration/index.js');
+              const { MockLogger } = await import('./dist/utils/index.js');
               console.log('🔍 Smoke Test: Full system integration');
               
               const logger = new MockLogger();

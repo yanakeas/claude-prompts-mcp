@@ -98,13 +98,26 @@ jobs:
         run: |
           cd server
           echo "Testing server startup capability..."
-          timeout 15s npm run start:debug > startup.log 2>&1 &
-          SERVER_PID=$!
+          
+          # Use a cross-platform timeout approach
+          if command -v timeout >/dev/null 2>&1; then
+            timeout 15s npm run start:debug > startup.log 2>&1 &
+            SERVER_PID=$!
+          elif command -v gtimeout >/dev/null 2>&1; then
+            # macOS with coreutils installed
+            gtimeout 15s npm run start:debug > startup.log 2>&1 &
+            SERVER_PID=$!
+          else
+            # Fallback: use background process with sleep
+            npm run start:debug > startup.log 2>&1 &
+            SERVER_PID=$!
+          fi
+          
           sleep 10
           
           if kill -0 $SERVER_PID 2>/dev/null; then
             echo "✅ Server started successfully"
-            kill $SERVER_PID
+            kill $SERVER_PID 2>/dev/null || true
           else
             echo "❌ Server failed to start"
             cat startup.log

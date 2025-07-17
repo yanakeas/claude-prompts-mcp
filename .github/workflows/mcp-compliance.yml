@@ -79,13 +79,13 @@ jobs:
           echo "🔍 Testing MCP server initialization and protocol compliance..."
           
           node -e "
-            const { ApplicationOrchestrator } = require('./dist/orchestration/index.js');
-            const { MockLogger } = require('./dist/utils/index.js');
-            
-            console.log('✅ MCP server modules imported successfully');
-            
             // Test server initialization without starting transport
             async function testInitialization() {
+              // Use dynamic imports for ES modules
+              const { ApplicationOrchestrator } = await import('./dist/orchestration/index.js');
+              const { MockLogger } = await import('./dist/utils/index.js');
+              
+              console.log('✅ MCP server modules imported successfully');
               try {
                 const logger = new MockLogger();
                 const orchestrator = new ApplicationOrchestrator(logger);
@@ -111,7 +111,10 @@ jobs:
               }
             }
             
-            testInitialization();
+            testInitialization().catch(error => {
+              console.error('❌ MCP server initialization failed:', error.message);
+              process.exit(1);
+            });
           "
       
       - name: MCP Tools Registration Validation
@@ -120,33 +123,33 @@ jobs:
           echo "🔍 Testing MCP tools registration and schema compliance..."
           
           node -e "
-            const { McpToolsManager } = require('./dist/mcp-tools/index.js');
-            const { MockLogger } = require('./dist/utils/index.js');
-            
-            console.log('✅ MCP Tools Manager imported successfully');
-            
-            // Mock MCP server for testing
-            const registeredTools = [];
-            const mockMcpServer = {
-              tool: function(name, description, schema) {
-                // Validate tool registration parameters
-                if (typeof name !== 'string' || !name) {
-                  throw new Error(\`Invalid tool name: \${name}\`);
-                }
-                if (typeof description !== 'string' || !description) {
-                  throw new Error(\`Invalid tool description for \${name}: \${description}\`);
-                }
-                if (!schema || typeof schema !== 'object') {
-                  throw new Error(\`Invalid tool schema for \${name}\`);
-                }
-                
-                registeredTools.push({ name, description, schema });
-                console.log(\`🔧 Registered tool: \${name}\`);
-                return { name, description, schema };
-              }
-            };
-            
             async function testToolsRegistration() {
+              // Use dynamic imports for ES modules
+              const { McpToolsManager } = await import('./dist/mcp-tools/index.js');
+              const { MockLogger } = await import('./dist/utils/index.js');
+              
+              console.log('✅ MCP Tools Manager imported successfully');
+              
+              // Mock MCP server for testing
+              const registeredTools = [];
+              const mockMcpServer = {
+                tool: function(name, description, schema) {
+                  // Validate tool registration parameters
+                  if (typeof name !== 'string' || !name) {
+                    throw new Error(\`Invalid tool name: \${name}\`);
+                  }
+                  if (typeof description !== 'string' || !description) {
+                    throw new Error(\`Invalid tool description for \${name}: \${description}\`);
+                  }
+                  if (!schema || typeof schema !== 'object') {
+                    throw new Error(\`Invalid tool schema for \${name}\`);
+                  }
+                  
+                  registeredTools.push({ name, description, schema });
+                  console.log(\`🔧 Registered tool: \${name}\`);
+                  return { name, description, schema };
+                }
+              };
               try {
                 const logger = new MockLogger();
                 const toolsManager = new McpToolsManager(logger, mockMcpServer, {});
@@ -193,7 +196,10 @@ jobs:
               }
             }
             
-            testToolsRegistration();
+            testToolsRegistration().catch(error => {
+              console.error('❌ MCP tools registration test failed:', error.message);
+              process.exit(1);
+            });
           "
       
       - name: MCP Transport Layer Validation
@@ -238,12 +244,14 @@ jobs:
           echo "🔍 Testing MCP message format compliance..."
           
           node -e "
-            const { MockLogger } = require('./dist/utils/index.js');
-            
-            console.log('✅ Starting message format validation');
-            
-            // Test message structure compliance
-            function validateMcpMessage(message) {
+            async function runMessageFormatValidation() {
+              // Use dynamic imports for ES modules
+              const { MockLogger } = await import('./dist/utils/index.js');
+              
+              console.log('✅ Starting message format validation');
+              
+              // Test message structure compliance
+              function validateMcpMessage(message) {
               if (!message || typeof message !== 'object') {
                 throw new Error('Invalid message structure');
               }
@@ -288,6 +296,12 @@ jobs:
             }
             
             console.log('🎉 MCP message format validation successful!');
+            }
+            
+            runMessageFormatValidation().catch(error => {
+              console.error('❌ Message format validation failed:', error.message);
+              process.exit(1);
+            });
           "
       
       - name: MCP Error Handling Validation
@@ -420,12 +434,12 @@ jobs:
           echo "🔍 Testing MCP performance and resource usage..."
           
           node -e "
-            const { ApplicationOrchestrator } = require('./dist/orchestration/index.js');
-            const { MockLogger } = require('./dist/utils/index.js');
-            
-            console.log('⏱️  Starting MCP performance validation...');
-            
             async function performanceTest() {
+              // Use dynamic imports for ES modules
+              const { ApplicationOrchestrator } = await import('./dist/orchestration/index.js');
+              const { MockLogger } = await import('./dist/utils/index.js');
+              
+              console.log('⏱️  Starting MCP performance validation...');
               const startMemory = process.memoryUsage();
               const startTime = Date.now();
               
@@ -474,5 +488,8 @@ jobs:
               }
             }
             
-            performanceTest();
+            performanceTest().catch(error => {
+              console.error('❌ Performance test failed:', error.message);
+              process.exit(1);
+            });
           "

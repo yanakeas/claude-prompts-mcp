@@ -57,12 +57,36 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           cd server
-          timeout 10s npm run start:debug || true
-          if [ $? -eq 124 ]; then
-            echo "✅ Server startup timeout (expected)"
+          # Use a cross-platform timeout approach
+          if command -v timeout >/dev/null 2>&1; then
+            timeout 10s npm run start:debug || true
+            if [ $? -eq 124 ]; then
+              echo "✅ Server startup timeout (expected)"
+            else
+              echo "❌ Server startup failed"
+              exit 1
+            fi
+          elif command -v gtimeout >/dev/null 2>&1; then
+            # macOS with coreutils installed
+            gtimeout 10s npm run start:debug || true
+            if [ $? -eq 124 ]; then
+              echo "✅ Server startup timeout (expected)"
+            else
+              echo "❌ Server startup failed"
+              exit 1
+            fi
           else
-            echo "❌ Server startup failed"
-            exit 1
+            # Fallback: use background process with sleep
+            npm run start:debug &
+            server_pid=$!
+            sleep 10
+            if kill -0 $server_pid 2>/dev/null; then
+              echo "✅ Server startup timeout (expected)"
+              kill $server_pid 2>/dev/null || true
+            else
+              echo "❌ Server startup failed"
+              exit 1
+            fi
           fi
       
       - name: Validate MCP server startup (Windows)
