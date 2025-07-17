@@ -141,36 +141,68 @@ jobs:
         run: |
           cd server
           node -e "
-            const analyzer = require('./dist/utils/cageerf-analyzer.js');
-            console.log('✅ CAGEERF Analyzer module loaded successfully');
-            console.log('Available exports:', Object.keys(analyzer));
+            async function validateCAGEERFAnalyzer() {
+              // Use dynamic imports for ES modules
+              const analyzer = await import('./dist/utils/cageerf-analyzer.js');
+              console.log('✅ CAGEERF Analyzer module loaded successfully');
+              console.log('Available exports:', Object.keys(analyzer));
+            }
+            
+            validateCAGEERFAnalyzer().catch(error => {
+              console.error('❌ CAGEERF Analyzer validation failed:', error.message);
+              process.exit(1);
+            });
           "
       
       - name: Validate Template Generator
         run: |
           cd server
           node -e "
-            const generator = require('./dist/utils/template-generator.js');
-            console.log('✅ Template Generator module loaded successfully');
-            console.log('Available exports:', Object.keys(generator));
+            async function validateTemplateGenerator() {
+              // Use dynamic imports for ES modules
+              const generator = await import('./dist/utils/template-generator.js');
+              console.log('✅ Template Generator module loaded successfully');
+              console.log('Available exports:', Object.keys(generator));
+            }
+            
+            validateTemplateGenerator().catch(error => {
+              console.error('❌ Template Generator validation failed:', error.message);
+              process.exit(1);
+            });
           "
       
       - name: Validate Template Repository
         run: |
           cd server
           node -e "
-            const repository = require('./dist/utils/template-repository.js');
-            console.log('✅ Template Repository module loaded successfully');
-            console.log('Available exports:', Object.keys(repository));
+            async function validateTemplateRepository() {
+              // Use dynamic imports for ES modules
+              const repository = await import('./dist/utils/template-repository.js');
+              console.log('✅ Template Repository module loaded successfully');
+              console.log('Available exports:', Object.keys(repository));
+            }
+            
+            validateTemplateRepository().catch(error => {
+              console.error('❌ Template Repository validation failed:', error.message);
+              process.exit(1);
+            });
           "
       
       - name: Validate Enhanced Semantic Analyzer
         run: |
           cd server
           node -e "
-            const analyzer = require('./dist/utils/semanticAnalyzer.js');
-            console.log('✅ Enhanced Semantic Analyzer module loaded successfully');
-            console.log('Available exports:', Object.keys(analyzer));
+            async function validateSemanticAnalyzer() {
+              // Use dynamic imports for ES modules
+              const analyzer = await import('./dist/utils/semanticAnalyzer.js');
+              console.log('✅ Enhanced Semantic Analyzer module loaded successfully');
+              console.log('Available exports:', Object.keys(analyzer));
+            }
+            
+            validateSemanticAnalyzer().catch(error => {
+              console.error('❌ Enhanced Semantic Analyzer validation failed:', error.message);
+              process.exit(1);
+            });
           "
 
   code-quality:

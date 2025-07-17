@@ -101,7 +101,7 @@ jobs:
               // Use dynamic imports for ES modules
               const { ApplicationOrchestrator } = await import('./dist/orchestration/index.js');
               const { MockLogger } = await import('./dist/utils/index.js');
-              const fs = require('fs');
+              const fs = await import('fs');
               const results = {};
               const logger = new MockLogger();
               
@@ -143,7 +143,7 @@ jobs:
               const resultsText = Object.entries(results)
                 .map(([key, value]) => \`\${key}=\${value}\`)
                 .join('\n');
-              fs.writeFileSync('../performance-results/startup.txt', resultsText);
+              fs.default.writeFileSync('../performance-results/startup.txt', resultsText);
               
               console.log('✅ Server startup performance test completed');
             }
@@ -166,7 +166,7 @@ jobs:
               const { TemplateGenerator } = await import('./dist/utils/template-generator.js');
               const { SemanticAnalyzer } = await import('./dist/utils/semanticAnalyzer.js');
               const { MockLogger } = await import('./dist/utils/index.js');
-              const fs = require('fs');
+              const fs = await import('fs');
               
               const results = {};
             
@@ -245,7 +245,7 @@ jobs:
             const resultsText = Object.entries(results)
               .map(([key, value]) => \`\${key}=\${value}\`)
               .join('\n');
-            fs.writeFileSync('../performance-results/cageerf.txt', resultsText);
+            fs.default.writeFileSync('../performance-results/cageerf.txt', resultsText);
             
             console.log('✅ CAGEERF framework performance test completed');
             }
@@ -268,7 +268,7 @@ jobs:
               const { CAGEERFAnalyzer } = await import('./dist/utils/cageerf-analyzer.js');
               const { TemplateGenerator } = await import('./dist/utils/template-generator.js');
               const { MockLogger } = await import('./dist/utils/index.js');
-              const fs = require('fs');
+              const fs = await import('fs');
               const results = {};
               
               // Baseline memory
@@ -321,7 +321,7 @@ jobs:
               const resultsText = Object.entries(results)
                 .map(([key, value]) => \`\${key}=\${value}\`)
                 .join('\n');
-              fs.writeFileSync('../performance-results/memory.txt', resultsText);
+              fs.default.writeFileSync('../performance-results/memory.txt', resultsText);
               
               console.log('✅ Memory usage test completed');
             }

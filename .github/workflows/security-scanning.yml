@@ -49,10 +49,12 @@ jobs:
           
           # Parse and display results
           node -e "
-            const fs = require('fs');
-            
-            try {
-              const auditData = JSON.parse(fs.readFileSync('../audit-results.json', 'utf8'));
+            async function parseAuditResults() {
+              // Use dynamic imports for ES modules
+              const fs = await import('fs');
+              
+              try {
+              const auditData = JSON.parse(fs.default.readFileSync('../audit-results.json', 'utf8'));
               
               console.log('📊 NPM Audit Results:');
               console.log('========================');
@@ -116,6 +118,12 @@ jobs:
               console.log('⚠️  Could not parse audit results:', error.message);
               console.log('✅ Continuing with manual vulnerability check...');
             }
+            }
+            
+            parseAuditResults().catch(error => {
+              console.error('❌ Error:', error.message);
+              process.exit(1);
+            });
           "
       
       - name: Dependency License Compliance Check
@@ -124,8 +132,11 @@ jobs:
           echo "🔍 Checking dependency license compliance..."
           
           node -e "
-            const packageJson = require('./package.json');
-            const packageLockJson = require('./package-lock.json');
+            async function checkLicenseCompliance() {
+              // Use dynamic imports for ES modules
+              const fs = await import('fs');
+              const packageJson = JSON.parse(fs.default.readFileSync('./package.json', 'utf8'));
+              const packageLockJson = JSON.parse(fs.default.readFileSync('./package-lock.json', 'utf8'));
             
             console.log('📊 License Compliance Analysis:');
             console.log('===============================');
@@ -150,15 +161,18 @@ jobs:
               'COPYLEFT'
             ];
             
-            function checkDependencyLicenses() {
+            async function checkDependencyLicenses() {
               const issues = [];
               const licenseStats = {};
+              const path = await import('path');
               
               // Check main dependencies
               console.log('\\n📦 Main Dependencies:');
-              Object.entries(packageJson.dependencies || {}).forEach(([name, version]) => {
+              for (const [name, version] of Object.entries(packageJson.dependencies || {})) {
                 try {
-                  const depPackage = require(\`./node_modules/\${name}/package.json\`);
+                  const depPackagePath = path.default.join('./node_modules', name, 'package.json');
+                  const depPackageContent = fs.default.readFileSync(depPackagePath, 'utf8');
+                  const depPackage = JSON.parse(depPackageContent);
                   const license = depPackage.license || 'UNKNOWN';
                   
                   licenseStats[license] = (licenseStats[license] || 0) + 1;
@@ -173,7 +187,7 @@ jobs:
                 } catch (error) {
                   console.log(\`  ⚠️  \${name}: Could not determine license\`);
                 }
-              });
+              }
               
               console.log('\\n📊 License Statistics:');
               Object.entries(licenseStats)
@@ -197,7 +211,13 @@ jobs:
               }
             }
             
-            checkDependencyLicenses();
+            await checkDependencyLicenses();
+            }
+            
+            checkLicenseCompliance().catch(error => {
+              console.error('❌ Error:', error.message);
+              process.exit(1);
+            });
           "
       
       - name: Outdated Dependencies Check
@@ -209,10 +229,12 @@ jobs:
           npm outdated --json > ../outdated.json 2>/dev/null || true
           
           node -e "
-            const fs = require('fs');
-            
-            try {
-              const outdatedData = fs.readFileSync('../outdated.json', 'utf8');
+            async function checkOutdatedDependencies() {
+              // Use dynamic imports for ES modules
+              const fs = await import('fs');
+              
+              try {
+                const outdatedData = fs.default.readFileSync('../outdated.json', 'utf8');
               
               if (outdatedData.trim()) {
                 const outdated = JSON.parse(outdatedData);
@@ -264,9 +286,15 @@ jobs:
               } else {
                 console.log('✅ All dependencies are up to date');
               }
-            } catch (error) {
-              console.log('✅ No outdated dependencies detected or error parsing results');
+              } catch (error) {
+                console.log('✅ No outdated dependencies detected or error parsing results');
+              }
             }
+            
+            checkOutdatedDependencies().catch(error => {
+              console.error('❌ Error:', error.message);
+              process.exit(1);
+            });
           "
       
       - name: Security Headers and Configuration Check
@@ -275,14 +303,16 @@ jobs:
           echo "🔍 Checking security configuration and headers..."
           
           node -e "
-            const fs = require('fs');
-            const path = require('path');
-            
-            console.log('📊 Security Configuration Analysis:');
-            console.log('===================================');
-            
-            // Check package.json for security-related configurations
-            const packageJson = require('./package.json');
+            async function checkSecurityConfiguration() {
+              // Use dynamic imports for ES modules
+              const fs = await import('fs');
+              const path = await import('path');
+              
+              console.log('📊 Security Configuration Analysis:');
+              console.log('===================================');
+              
+              // Check package.json for security-related configurations
+              const packageJson = JSON.parse(fs.default.readFileSync('./package.json', 'utf8'));
             
             console.log('\\n🔒 Package Security Configuration:');
             
@@ -312,8 +342,8 @@ jobs:
             });
             
             // Check TypeScript configuration
-            if (fs.existsSync('./tsconfig.json')) {
-              const tsConfig = JSON.parse(fs.readFileSync('./tsconfig.json', 'utf8'));
+            if (fs.default.existsSync('./tsconfig.json')) {
+              const tsConfig = JSON.parse(fs.default.readFileSync('./tsconfig.json', 'utf8'));
               
               console.log('\\n📝 TypeScript Security Configuration:');
               
@@ -349,20 +379,31 @@ jobs:
             ];
             
             let foundSensitive = false;
-            sensitivePatterns.forEach(pattern => {
-              const files = require('glob').sync(pattern, { ignore: 'node_modules/**' });
-              if (files.length > 0) {
-                console.log(\`  🚨 Found sensitive files: \${files.join(', ')}\`);
-                foundSensitive = true;
+            try {
+              const glob = await import('glob');
+              for (const pattern of sensitivePatterns) {
+                const files = glob.default.sync(pattern, { ignore: 'node_modules/**' });
+                if (files.length > 0) {
+                  console.log(\`  🚨 Found sensitive files: \${files.join(', ')}\`);
+                  foundSensitive = true;
+                }
               }
-            });
+            } catch (error) {
+              console.log('⚠️ Glob not available, skipping sensitive files check');
+            }
             
             if (!foundSensitive) {
               console.log('  ✅ No sensitive files found in repository');
             }
             
             console.log('\\n✅ Security configuration check completed');
-          " 2>/dev/null || echo "⚠️ Glob not available, skipping sensitive files check"
+            }
+            
+            checkSecurityConfiguration().catch(error => {
+              console.error('❌ Error:', error.message);
+              process.exit(1);
+            });
+          "
       
       - name: Code Quality Security Analysis
         run: |
@@ -370,11 +411,13 @@ jobs:
           echo "🔍 Running code quality security analysis..."
           
           node -e "
-            const fs = require('fs');
-            const path = require('path');
-            
-            console.log('📊 Code Quality Security Analysis:');
-            console.log('==================================');
+            async function runCodeQualityAnalysis() {
+              // Use dynamic imports for ES modules
+              const fs = await import('fs');
+              const path = await import('path');
+              
+              console.log('📊 Code Quality Security Analysis:');
+              console.log('==================================');
             
             // Security patterns to check for
             const securityPatterns = [
@@ -390,7 +433,7 @@ jobs:
             
             function scanFile(filePath) {
               try {
-                const content = fs.readFileSync(filePath, 'utf8');
+                const content = fs.default.readFileSync(filePath, 'utf8');
                 const lines = content.split('\\n');
                 const issues = [];
                 
@@ -418,11 +461,11 @@ jobs:
               let allIssues = [];
               
               try {
-                const items = fs.readdirSync(dir);
+                const items = fs.default.readdirSync(dir);
                 
                 items.forEach(item => {
-                  const fullPath = path.join(dir, item);
-                  const stat = fs.statSync(fullPath);
+                  const fullPath = path.default.join(dir, item);
+                  const stat = fs.default.statSync(fullPath);
                   
                   if (stat.isDirectory() && item !== 'node_modules' && item !== 'dist') {
                     allIssues = allIssues.concat(scanDirectory(fullPath));
@@ -483,6 +526,12 @@ jobs:
             }
             
             console.log('\\n✅ Code quality security analysis completed');
+            }
+            
+            runCodeQualityAnalysis().catch(error => {
+              console.error('❌ Error:', error.message);
+              process.exit(1);
+            });
           "
       
       - name: Generate Security Report

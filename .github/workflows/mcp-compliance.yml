@@ -51,26 +51,35 @@ jobs:
           echo "🔍 Validating MCP SDK version and compatibility..."
           
           node -e "
-            const packageJson = require('./package.json');
-            const mcpSdkVersion = packageJson.dependencies['@modelcontextprotocol/sdk'];
-            
-            console.log('✅ MCP SDK version:', mcpSdkVersion);
-            
-            // Validate minimum version requirements
-            const versionMatch = mcpSdkVersion.match(/(\d+)\.(\d+)\.(\d+)/);
-            if (!versionMatch) {
-              throw new Error('Invalid MCP SDK version format');
+            async function validateMcpSdkVersion() {
+              // Use dynamic imports for ES modules
+              const fs = await import('fs');
+              const packageJson = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
+              const mcpSdkVersion = packageJson.dependencies['@modelcontextprotocol/sdk'];
+              
+              console.log('✅ MCP SDK version:', mcpSdkVersion);
+              
+              // Validate minimum version requirements
+              const versionMatch = mcpSdkVersion.match(/(\d+)\.(\d+)\.(\d+)/);
+              if (!versionMatch) {
+                throw new Error('Invalid MCP SDK version format');
+              }
+              
+              const [, major, minor, patch] = versionMatch.map(Number);
+              const minMajor = 1, minMinor = 6, minPatch = 0;
+              
+              if (major < minMajor || (major === minMajor && minor < minMinor) || 
+                  (major === minMajor && minor === minMinor && patch < minPatch)) {
+                throw new Error(\`MCP SDK version \${mcpSdkVersion} is below minimum required 1.6.0\`);
+              }
+              
+              console.log('✅ MCP SDK version meets minimum requirements');
             }
             
-            const [, major, minor, patch] = versionMatch.map(Number);
-            const minMajor = 1, minMinor = 6, minPatch = 0;
-            
-            if (major < minMajor || (major === minMajor && minor < minMinor) || 
-                (major === minMajor && minor === minMinor && patch < minPatch)) {
-              throw new Error(\`MCP SDK version \${mcpSdkVersion} is below minimum required 1.6.0\`);
-            }
-            
-            console.log('✅ MCP SDK version meets minimum requirements');
+            validateMcpSdkVersion().catch(error => {
+              console.error('❌ MCP SDK version validation failed:', error.message);
+              process.exit(1);
+            });
           "
       
       - name: MCP Server Initialization Validation
@@ -208,34 +217,42 @@ jobs:
           echo "🔍 Testing MCP transport layer compliance..."
           
           node -e "
-            const fs = require('fs');
-            const path = require('path');
-            
-            console.log('✅ Starting transport layer validation');
-            
-            // Check if transport files exist
-            const transportFiles = [
-              'dist/transport/index.js'
-            ];
-            
-            for (const file of transportFiles) {
-              if (!fs.existsSync(file)) {
-                throw new Error(\`Missing transport file: \${file}\`);
+            async function validateTransportLayer() {
+              // Use dynamic imports for ES modules
+              const fs = await import('fs');
+              const path = await import('path');
+              
+              console.log('✅ Starting transport layer validation');
+              
+              // Check if transport files exist
+              const transportFiles = [
+                'dist/transport/index.js'
+              ];
+              
+              for (const file of transportFiles) {
+                if (!fs.existsSync(file)) {
+                  throw new Error(\`Missing transport file: \${file}\`);
+                }
+                console.log(\`✅ Transport file found: \${file}\`);
               }
-              console.log(\`✅ Transport file found: \${file}\`);
+              
+              // Import and validate transport module
+              const transport = await import('./dist/transport/index.js');
+              
+              if (!transport || typeof transport !== 'object') {
+                throw new Error('Invalid transport module export');
+              }
+              
+              console.log('✅ Transport module imported successfully');
+              console.log('Available transport types:', Object.keys(transport));
+              
+              console.log('🎉 MCP transport layer validation successful!');
             }
             
-            // Import and validate transport module
-            const transport = require('./dist/transport/index.js');
-            
-            if (!transport || typeof transport !== 'object') {
-              throw new Error('Invalid transport module export');
-            }
-            
-            console.log('✅ Transport module imported successfully');
-            console.log('Available transport types:', Object.keys(transport));
-            
-            console.log('🎉 MCP transport layer validation successful!');
+            validateTransportLayer().catch(error => {
+              console.error('❌ Transport layer validation failed:', error.message);
+              process.exit(1);
+            });
           "
       
       - name: MCP Message Format Validation
@@ -310,12 +327,13 @@ jobs:
           echo "🔍 Testing MCP error handling compliance..."
           
           node -e "
-            const { utilsHandleError } = require('./dist/utils/index.js');
-            const { MockLogger } = require('./dist/utils/index.js');
-            
-            console.log('✅ Starting error handling validation');
-            
-            const logger = new MockLogger();
+            async function validateErrorHandling() {
+              // Use dynamic imports for ES modules
+              const { utilsHandleError, MockLogger } = await import('./dist/utils/index.js');
+              
+              console.log('✅ Starting error handling validation');
+              
+              const logger = new MockLogger();
             
             // Test error handling function
             function testErrorHandling() {
@@ -350,8 +368,14 @@ jobs:
               }
             }
             
-            testErrorHandling();
-            console.log('🎉 MCP error handling validation successful!');
+              testErrorHandling();
+              console.log('🎉 MCP error handling validation successful!');
+            }
+            
+            validateErrorHandling().catch(error => {
+              console.error('❌ Error handling validation failed:', error.message);
+              process.exit(1);
+            });
           "
       
       - name: MCP Protocol Integration Test
@@ -360,12 +384,14 @@ jobs:
           echo "🔍 Running end-to-end MCP protocol integration test..."
           
           node -e "
-            const { ApplicationOrchestrator } = require('./dist/orchestration/index.js');
-            const { MockLogger } = require('./dist/utils/index.js');
-            
-            console.log('🔄 Starting MCP protocol integration test...');
-            
-            async function integrationTest() {
+            async function mcpProtocolIntegrationTest() {
+              // Use dynamic imports for ES modules
+              const { ApplicationOrchestrator } = await import('./dist/orchestration/index.js');
+              const { MockLogger } = await import('./dist/utils/index.js');
+              
+              console.log('🔄 Starting MCP protocol integration test...');
+              
+              async function integrationTest() {
               try {
                 const logger = new MockLogger();
                 
@@ -425,7 +451,13 @@ jobs:
               }
             }
             
-            integrationTest();
+              await integrationTest();
+            }
+            
+            mcpProtocolIntegrationTest().catch(error => {
+              console.error('❌ MCP protocol integration test failed:', error.message);
+              process.exit(1);
+            });
           "
       
       - name: MCP Performance and Resource Validation
