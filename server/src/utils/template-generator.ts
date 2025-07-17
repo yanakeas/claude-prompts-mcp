@@ -581,17 +581,17 @@ export class TemplateGenerator {
   }
 
   private calculateQualityScore(analysis: CAGEERFAnalysis, request: TemplateGenerationRequest): number {
-    let score = analysis.frameworkScore * 60; // Base framework compliance (60%)
+    let score = analysis.frameworkScore * 0.6; // Base framework compliance (60%)
     
     // Add bonus for complexity alignment
-    const complexityBonus = request.complexity === 'expert' ? 15 : request.complexity === 'advanced' ? 10 : 5;
+    const complexityBonus = request.complexity === 'expert' ? 0.15 : request.complexity === 'advanced' ? 0.10 : 0.05;
     score += complexityBonus;
     
     // Add bonus for comprehensive CAGEERF coverage
     const emphasizedComponents = Object.values(request.frameworkEmphasis).filter(Boolean).length;
-    score += (emphasizedComponents / 7) * 25; // Up to 25% bonus for full coverage
+    score += (emphasizedComponents / 7) * 0.25; // Up to 25% bonus for full coverage
     
-    return Math.min(100, score);
+    return Math.min(1.0, score);
   }
 
   private createStyleVariation(baseTemplate: Omit<GeneratedTemplate, 'cageerfCompliance' | 'qualityScore' | 'enhancementSuggestions' | 'variations'>, style: TemplateGenerationRequest['templateStyle'], request: TemplateGenerationRequest): TemplateVariation | null {
