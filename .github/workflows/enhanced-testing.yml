@@ -166,7 +166,7 @@ jobs:
               for (const complexity of complexities) {
                 for (const style of styles) {
                   try {
-                    const template = generator.generateTemplate({
+                    const template = await generator.generateTemplate({
                       useCase: \`Test \${complexity} \${style}\`,
                       domain: 'Testing',
                       complexity: complexity,
@@ -174,29 +174,30 @@ jobs:
                         context: true, analysis: true, goals: true,
                         execution: true, evaluation: true, refinement: true, framework: true
                       },
-                      templateStyle: style
+                      templateStyle: style,
+                      includePlaceholders: true
                     });
                     
                     // Validate template structure
-                    if (!template.content || typeof template.content !== 'string') {
+                    if (!template.userMessageTemplate || typeof template.userMessageTemplate !== 'string') {
                       throw new Error('Invalid template content');
                     }
                     
-                    if (!template.cageerfScore || template.cageerfScore < 0 || template.cageerfScore > 1) {
-                      throw new Error(\`Invalid CAGEERF score: \${template.cageerfScore}\`);
+                    if (!template.qualityScore || template.qualityScore < 0 || template.qualityScore > 1) {
+                      throw new Error(\`Invalid CAGEERF score: \${template.qualityScore}\`);
                     }
                     
-                    if (!template.qualityMetrics || typeof template.qualityMetrics !== 'object') {
-                      throw new Error('Invalid quality metrics');
+                    if (!template.cageerfCompliance || typeof template.cageerfCompliance !== 'object') {
+                      throw new Error('Invalid CAGEERF compliance data');
                     }
                     
                     // Validate minimum content length based on complexity
                     const minLengths = { simple: 100, intermediate: 300, advanced: 600, expert: 900 };
-                    if (template.content.length < minLengths[complexity]) {
-                      throw new Error(\`Template too short for \${complexity}: \${template.content.length} chars\`);
+                    if (template.userMessageTemplate.length < minLengths[complexity]) {
+                      throw new Error(\`Template too short for \${complexity}: \${template.userMessageTemplate.length} chars\`);
                     }
                     
-                    console.log(\`✅ Template \${complexity}/\${style} passed (score: \${template.cageerfScore.toFixed(3)}, length: \${template.content.length})\`);
+                    console.log(\`✅ Template \${complexity}/\${style} passed (score: \${template.qualityScore.toFixed(3)}, length: \${template.userMessageTemplate.length})\`);
                   } catch (error) {
                     throw new Error(\`Template generation failed for \${complexity}/\${style}: \${error.message}\`);
                   }
@@ -220,12 +221,12 @@ jobs:
               for (let i = 0; i < repository.templates.length; i++) {
                 const template = repository.templates[i];
                 
-                if (!template.name || !template.content || !template.category || !template.cageerfScore) {
+                if (!template.name || !template.baseTemplate || !template.category || !template.complexity) {
                   throw new Error(\`Invalid template structure at index \${i}\`);
                 }
                 
-                if (template.cageerfScore < 0.5) {
-                  throw new Error(\`Low quality template: \${template.name} (score: \${template.cageerfScore})\`);
+                if (template.baseTemplate.length < 50) {
+                  throw new Error(\`Template too short: \${template.name} (length: \${template.baseTemplate.length})\`);
                 }
               }
               
