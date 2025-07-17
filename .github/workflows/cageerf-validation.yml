@@ -53,12 +53,14 @@ jobs:
           echo "🔍 Testing CAGEERF Analyzer functionality..."
           
           node -e "
-            const { CAGEERFAnalyzer } = require('./dist/utils/cageerf-analyzer.js');
-            
-            console.log('✅ CAGEERF Analyzer imported successfully');
-            
-            // Test analyzer initialization
-            const analyzer = new CAGEERFAnalyzer();
+            async function testCAGEERFAnalyzer() {
+              // Use dynamic imports for ES modules
+              const { CAGEERFAnalyzer } = await import('./dist/utils/cageerf-analyzer.js');
+              
+              console.log('✅ CAGEERF Analyzer imported successfully');
+              
+              // Test analyzer initialization
+              const analyzer = new CAGEERFAnalyzer();
             console.log('✅ CAGEERF Analyzer instantiated');
             
             // Test analysis functionality
@@ -87,6 +89,12 @@ jobs:
             }
             
             console.log('🎉 CAGEERF Analyzer deep validation successful!');
+            }
+            
+            testCAGEERFAnalyzer().catch(error => {
+              console.error('❌ CAGEERF Analyzer validation failed:', error.message);
+              process.exit(1);
+            });
           "
       
       - name: Template Generator Validation
@@ -95,9 +103,11 @@ jobs:
           echo "🔍 Testing Template Generator functionality..."
           
           node -e "
-            const { TemplateGenerator } = require('./dist/utils/template-generator.js');
-            
-            console.log('✅ Template Generator imported successfully');
+            async function testTemplateGenerator() {
+              // Use dynamic imports for ES modules
+              const { TemplateGenerator } = await import('./dist/utils/template-generator.js');
+              
+              console.log('✅ Template Generator imported successfully');
             
             // Test generator initialization
             const generator = new TemplateGenerator();
@@ -149,6 +159,12 @@ jobs:
             }
             
             console.log('🎉 Template Generator validation successful!');
+            }
+            
+            testTemplateGenerator().catch(error => {
+              console.error('❌ Template Generator validation failed:', error.message);
+              process.exit(1);
+            });
           "
       
       - name: Template Repository Validation
@@ -157,9 +173,11 @@ jobs:
           echo "🔍 Testing Template Repository functionality..."
           
           node -e "
-            const { TemplateRepositoryBuilder } = require('./dist/utils/template-repository.js');
-            
-            console.log('✅ Template Repository imported successfully');
+            async function testTemplateRepository() {
+              // Use dynamic imports for ES modules
+              const { TemplateRepositoryBuilder } = await import('./dist/utils/template-repository.js');
+              
+              console.log('✅ Template Repository imported successfully');
             
             // Test repository building
             const repository = TemplateRepositoryBuilder.buildRepository();
@@ -195,6 +213,12 @@ jobs:
             }
             
             console.log('🎉 Template Repository validation successful!');
+            }
+            
+            testTemplateRepository().catch(error => {
+              console.error('❌ Template Repository validation failed:', error.message);
+              process.exit(1);
+            });
           "
       
       - name: MCP Tools Integration Validation
@@ -203,10 +227,12 @@ jobs:
           echo "🔍 Testing MCP Tools integration..."
           
           node -e "
-            const { TemplateGenerationTools } = require('./dist/mcp-tools/template-generation-tools.js');
-            const { MockLogger } = require('./dist/utils/index.js');
-            
-            console.log('✅ Template Generation Tools imported successfully');
+            async function testMcpToolsIntegration() {
+              // Use dynamic imports for ES modules
+              const { TemplateGenerationTools } = await import('./dist/mcp-tools/template-generation-tools.js');
+              const { MockLogger } = await import('./dist/utils/index.js');
+              
+              console.log('✅ Template Generation Tools imported successfully');
             
             // Mock MCP server for testing
             const mockMcpServer = {
@@ -244,7 +270,13 @@ jobs:
               console.log('ℹ️  Additional tools registered:', registeredNames.filter(name => !expectedTools.includes(name)));
             }
             
-            console.log('🎉 MCP Tools integration validation successful!');
+              console.log('🎉 MCP Tools integration validation successful!');
+            }
+            
+            testMcpToolsIntegration().catch(error => {
+              console.error('❌ MCP Tools integration validation failed:', error.message);
+              process.exit(1);
+            });
           "
       
       - name: Semantic Analyzer CAGEERF Integration Validation
@@ -253,10 +285,12 @@ jobs:
           echo "🔍 Testing Semantic Analyzer CAGEERF integration..."
           
           node -e "
-            const { SemanticAnalyzer } = require('./dist/utils/semanticAnalyzer.js');
-            const { MockLogger } = require('./dist/utils/index.js');
-            
-            console.log('✅ Semantic Analyzer imported successfully');
+            async function testSemanticAnalyzer() {
+              // Use dynamic imports for ES modules
+              const { SemanticAnalyzer } = await import('./dist/utils/semanticAnalyzer.js');
+              const { MockLogger } = await import('./dist/utils/index.js');
+              
+              console.log('✅ Semantic Analyzer imported successfully');
             
             // Test analyzer initialization
             const logger = new MockLogger();
@@ -293,7 +327,13 @@ jobs:
             console.log('Framework score:', classification.cageerfAnalysis.frameworkScore);
             console.log('Compliance components:', Object.keys(classification.cageerfAnalysis.compliance).length);
             
-            console.log('🎉 Semantic Analyzer CAGEERF integration validation successful!');
+              console.log('🎉 Semantic Analyzer CAGEERF integration validation successful!');
+            }
+            
+            testSemanticAnalyzer().catch(error => {
+              console.error('❌ Semantic Analyzer CAGEERF integration validation failed:', error.message);
+              process.exit(1);
+            });
           "
       
       - name: Integration Test - End-to-End CAGEERF Workflow
@@ -302,12 +342,14 @@ jobs:
           echo "🔍 Running end-to-end CAGEERF workflow test..."
           
           node -e "
-            const { CAGEERFAnalyzer } = require('./dist/utils/cageerf-analyzer.js');
-            const { TemplateGenerator } = require('./dist/utils/template-generator.js');
-            const { SemanticAnalyzer } = require('./dist/utils/semanticAnalyzer.js');
-            const { MockLogger } = require('./dist/utils/index.js');
-            
-            console.log('🔄 Starting end-to-end CAGEERF workflow test...');
+            async function endToEndTest() {
+              // Use dynamic imports for ES modules
+              const { CAGEERFAnalyzer } = await import('./dist/utils/cageerf-analyzer.js');
+              const { TemplateGenerator } = await import('./dist/utils/template-generator.js');
+              const { SemanticAnalyzer } = await import('./dist/utils/semanticAnalyzer.js');
+              const { MockLogger } = await import('./dist/utils/index.js');
+              
+              console.log('🔄 Starting end-to-end CAGEERF workflow test...');
             
             // Step 1: Analyze a prompt with CAGEERF
             const analyzer = new CAGEERFAnalyzer();
@@ -375,9 +417,15 @@ jobs:
               throw new Error('Semantic analysis degraded template quality');
             }
             
-            console.log('🎉 End-to-end CAGEERF workflow validation successful!');
-            console.log('   All components working together effectively');
-            console.log('   Framework maintains quality and consistency');
+              console.log('🎉 End-to-end CAGEERF workflow validation successful!');
+              console.log('   All components working together effectively');
+              console.log('   Framework maintains quality and consistency');
+            }
+            
+            endToEndTest().catch(error => {
+              console.error('❌ End-to-end CAGEERF workflow test failed:', error.message);
+              process.exit(1);
+            });
           "
       
       - name: Performance Benchmark
@@ -386,10 +434,12 @@ jobs:
           echo "🔍 Running CAGEERF performance benchmarks..."
           
           node -e "
-            const { CAGEERFAnalyzer } = require('./dist/utils/cageerf-analyzer.js');
-            const { TemplateGenerator } = require('./dist/utils/template-generator.js');
-            
-            console.log('⏱️  Starting performance benchmarks...');
+            async function performanceBenchmark() {
+              // Use dynamic imports for ES modules
+              const { CAGEERFAnalyzer } = await import('./dist/utils/cageerf-analyzer.js');
+              const { TemplateGenerator } = await import('./dist/utils/template-generator.js');
+              
+              console.log('⏱️  Starting performance benchmarks...');
             
             const analyzer = new CAGEERFAnalyzer();
             const generator = new TemplateGenerator();
@@ -437,5 +487,11 @@ jobs:
               }
             }
             
-            console.log('✅ Performance benchmarks completed successfully');
+              console.log('✅ Performance benchmarks completed successfully');
+            }
+            
+            performanceBenchmark().catch(error => {
+              console.error('❌ Performance benchmarks failed:', error.message);
+              process.exit(1);
+            });
           "

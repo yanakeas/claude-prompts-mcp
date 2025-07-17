@@ -188,10 +188,10 @@ jobs:
           echo "🔍 Testing memory usage patterns..."
           
           node -e "
-            const { ApplicationOrchestrator } = require('./dist/orchestration/index.js');
-            const { MockLogger } = require('./dist/utils/index.js');
-            
             async function memoryTest() {
+              // Use dynamic imports for ES modules
+              const { ApplicationOrchestrator } = await import('./dist/orchestration/index.js');
+              const { MockLogger } = await import('./dist/utils/index.js');
               const initialMemory = process.memoryUsage();
               console.log('📊 Initial memory usage:');
               console.log('  RSS:', Math.round(initialMemory.rss / 1024 / 1024) + 'MB');
@@ -261,10 +261,10 @@ jobs:
           echo "🔍 Testing STDIO transport initialization..."
           
           node -e "
-            const { ApplicationOrchestrator } = require('./dist/orchestration/index.js');
-            const { MockLogger } = require('./dist/utils/index.js');
-            
             async function testStdioTransport() {
+              // Use dynamic imports for ES modules
+              const { ApplicationOrchestrator } = await import('./dist/orchestration/index.js');
+              const { MockLogger } = await import('./dist/utils/index.js');
               try {
                 console.log('📡 Testing STDIO transport initialization...');
                 
@@ -349,10 +349,10 @@ jobs:
           echo "🔍 Testing transport switching functionality..."
           
           node -e "
-            const { ApplicationOrchestrator } = require('./dist/orchestration/index.js');
-            const { MockLogger } = require('./dist/utils/index.js');
-            
             async function testTransportSwitching() {
+              // Use dynamic imports for ES modules
+              const { ApplicationOrchestrator } = await import('./dist/orchestration/index.js');
+              const { MockLogger } = await import('./dist/utils/index.js');
               try {
                 console.log('📡 Testing transport switching...');
                 
@@ -398,10 +398,10 @@ jobs:
           echo "🔍 Testing MCP client compatibility..."
           
           node -e "
-            const { ApplicationOrchestrator } = require('./dist/orchestration/index.js');
-            const { MockLogger } = require('./dist/utils/index.js');
-            
             async function testMcpCompatibility() {
+              // Use dynamic imports for ES modules
+              const { ApplicationOrchestrator } = await import('./dist/orchestration/index.js');
+              const { MockLogger } = await import('./dist/utils/index.js');
               try {
                 console.log('🤝 Testing MCP client compatibility...');
                 
@@ -431,7 +431,7 @@ jobs:
                 };
                 
                 // Create new tools manager with mock server
-                const { McpToolsManager } = require('./dist/mcp-tools/index.js');
+                const { McpToolsManager } = await import('./dist/mcp-tools/index.js');
                 const testManager = new McpToolsManager(logger, mockServer, {});
                 
                 // Test data updates
@@ -578,10 +578,10 @@ jobs:
           echo "🔍 Testing production runtime compatibility..."
           
           NODE_ENV=production node -e "
-            const { ApplicationOrchestrator } = require('./dist/orchestration/index.js');
-            const { MockLogger } = require('./dist/utils/index.js');
-            
             async function testProductionRuntime() {
+              // Use dynamic imports for ES modules
+              const { ApplicationOrchestrator } = await import('./dist/orchestration/index.js');
+              const { MockLogger } = await import('./dist/utils/index.js');
               try {
                 console.log('🚀 Testing production runtime...');
                 console.log('Environment:', process.env.NODE_ENV);
