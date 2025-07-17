@@ -116,7 +116,10 @@ export class CAGEERFAnalyzer {
    * Get combined text from prompt for analysis
    */
   private getCombinedText(prompt: ConvertedPrompt): string {
-    return `${prompt.systemMessage || ""} ${prompt.userMessageTemplate} ${prompt.description}`.toLowerCase();
+    if (!prompt) {
+      return "";
+    }
+    return `${prompt.systemMessage || ""} ${prompt.userMessageTemplate || ""} ${prompt.description || ""}`.toLowerCase();
   }
 
   /**
