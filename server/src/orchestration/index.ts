@@ -414,23 +414,32 @@ ${attemptedPaths}
 
     // Only show startup messages if not in quiet mode
     if (!isQuiet) {
+      console.error("DEBUG: About to call logger.info - Starting MCP...");
       this.logger.info("Starting MCP Claude Prompts Server...");
+      console.error("DEBUG: First logger.info completed");
       this.logger.info(`Transport: ${transport}`);
+      console.error("DEBUG: Second logger.info completed");
     }
 
     // Verbose mode shows detailed configuration info
     if (isVerbose) {
+      console.error("DEBUG: About to call verbose logger.info calls");
       this.logger.info(`Server root: ${serverRoot}`);
       this.logger.info(`Config file: ${CONFIG_FILE}`);
       this.logger.debug(`Command line args: ${JSON.stringify(args)}`);
       this.logger.debug(`Process working directory: ${process.cwd()}`);
+      console.error("DEBUG: Verbose logger.info calls completed");
     }
 
     // Initialize text reference manager
+    console.error("DEBUG: About to create TextReferenceManager");
     this.textReferenceManager = new TextReferenceManager(this.logger);
+    console.error("DEBUG: TextReferenceManager created");
 
     // Initialize conversation manager
+    console.error("DEBUG: About to create ConversationManager");
     this.conversationManager = createConversationManager(this.logger);
+    console.error("DEBUG: ConversationManager created");
 
     // Create MCP server
     const config = this.configManager.getConfig();
