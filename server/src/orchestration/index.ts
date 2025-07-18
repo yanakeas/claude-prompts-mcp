@@ -438,11 +438,20 @@ ${attemptedPaths}
 
     // Initialize conversation manager
     console.error("DEBUG: About to create ConversationManager");
-    this.conversationManager = createConversationManager(this.logger);
+    try {
+      this.conversationManager = createConversationManager(this.logger);
+      console.error("DEBUG: ConversationManager created successfully");
+    } catch (error) {
+      console.error("DEBUG: ConversationManager creation failed:", error);
+      throw error;
+    }
     console.error("DEBUG: ConversationManager created");
 
     // Create MCP server
+    console.error("DEBUG: About to get config");
     const config = this.configManager.getConfig();
+    console.error("DEBUG: Config retrieved successfully");
+    console.error("DEBUG: About to create McpServer");
     this.mcpServer = new McpServer({
       name: config.server.name,
       version: config.server.version,
@@ -451,11 +460,15 @@ ${attemptedPaths}
         // TODO: Add other capabilities if supported, e.g., for tools
       },
     });
+    console.error("DEBUG: McpServer created successfully");
 
     // Only log completion in verbose mode
     if (isVerbose) {
+      console.error("DEBUG: About to log foundation initialized");
       this.logger.info("Foundation modules initialized");
+      console.error("DEBUG: Foundation initialized log completed");
     }
+    console.error("DEBUG: initializeFoundation completed successfully");
   }
 
   /**
