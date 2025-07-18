@@ -383,14 +383,29 @@ ${attemptedPaths}
     // Determine server root directory robustly
     const serverRoot = await this.determineServerRoot();
     console.error("DEBUG: Server root detected:", serverRoot);
+    console.error("DEBUG: Server root type:", typeof serverRoot);
+    console.error("DEBUG: Server root length:", serverRoot ? serverRoot.length : 'undefined');
 
     // Initialize configuration manager using the detected server root
+    console.error("DEBUG: About to call path.join with serverRoot:", serverRoot);
     const CONFIG_FILE = path.join(serverRoot, "config.json");
     console.error("DEBUG: Config file path:", CONFIG_FILE);
-    this.configManager = new ConfigManager(CONFIG_FILE);
-    console.error("DEBUG: ConfigManager created");
-    await this.configManager.loadConfig();
-    console.error("DEBUG: Config loaded");
+    console.error("DEBUG: About to create ConfigManager with CONFIG_FILE:", CONFIG_FILE);
+    try {
+      this.configManager = new ConfigManager(CONFIG_FILE);
+      console.error("DEBUG: ConfigManager created successfully");
+    } catch (error) {
+      console.error("DEBUG: ConfigManager creation failed:", error);
+      throw error;
+    }
+    console.error("DEBUG: About to load config");
+    try {
+      await this.configManager.loadConfig();
+      console.error("DEBUG: Config loaded successfully");
+    } catch (error) {
+      console.error("DEBUG: Config loading failed:", error);
+      throw error;
+    }
 
     // Determine transport from command line arguments
     const args = process.argv.slice(2);
