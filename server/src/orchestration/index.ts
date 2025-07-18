@@ -383,8 +383,27 @@ ${attemptedPaths}
     // Determine server root directory robustly
     const serverRoot = await this.determineServerRoot();
     console.error("DEBUG: Server root detected:", serverRoot);
-    console.error("DEBUG: Server root type:", typeof serverRoot);
-    console.error("DEBUG: Server root length:", serverRoot ? serverRoot.length : 'undefined');
+    
+    // Check if the process is still alive
+    console.error("DEBUG: Process still alive after serverRoot assignment");
+    
+    try {
+      console.error("DEBUG: About to check serverRoot type");
+      const rootType = typeof serverRoot;
+      console.error("DEBUG: Server root type:", rootType);
+    } catch (error) {
+      console.error("DEBUG: Error checking serverRoot type:", error);
+      throw error;
+    }
+    
+    try {
+      console.error("DEBUG: About to check serverRoot length");
+      const rootLength = serverRoot ? serverRoot.length : 'undefined';
+      console.error("DEBUG: Server root length:", rootLength);
+    } catch (error) {
+      console.error("DEBUG: Error checking serverRoot length:", error);
+      throw error;
+    }
 
     // Initialize configuration manager using the detected server root
     console.error("DEBUG: About to call path.join with serverRoot:", serverRoot);
