@@ -208,8 +208,8 @@ export class SemanticAnalyzer {
     let requiresExecution = false;
 
     // Analyze complexity indicators
-    const userTemplate = prompt.userMessageTemplate;
-    const argumentCount = prompt.arguments.length;
+    const userTemplate = prompt.userMessageTemplate || '';
+    const argumentCount = prompt.arguments?.length || 0;
     
     // Multiple arguments suggest complex processing
     if (argumentCount > 2) {

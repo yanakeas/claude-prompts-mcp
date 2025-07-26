@@ -65,7 +65,7 @@ jobs:
             
             // Test analysis functionality
             const testPrompt = 'Create a comprehensive analysis framework for evaluating user requirements and generating systematic solutions.';
-            const analysis = analyzer.analyzePrompt(testPrompt);
+            const analysis = analyzer.analyzeText(testPrompt);
             
             console.log('✅ Analysis completed successfully');
             console.log('Framework Score:', analysis.frameworkScore);
@@ -130,20 +130,20 @@ jobs:
               templateStyle: 'structured'
             };
             
-            const template = generator.generateTemplate(request);
+            const template = await generator.generateTemplate(request);
             
             console.log('✅ Template generation completed successfully');
-            console.log('Template length:', template.content.length);
-            console.log('CAGEERF score:', template.cageerfScore);
-            console.log('Quality metrics:', Object.keys(template.qualityMetrics).length);
+            console.log('Template length:', template.userMessageTemplate.length);
+            console.log('Quality score:', template.qualityScore);
+            console.log('CAGEERF score:', template.cageerfCompliance.frameworkScore);
             
             // Validate template structure
-            if (!template.content || !template.cageerfScore || !template.qualityMetrics) {
+            if (!template.userMessageTemplate || !template.qualityScore || !template.cageerfCompliance) {
               throw new Error('Invalid template structure');
             }
             
             // Validate template contains CAGEERF components
-            const contentLower = template.content.toLowerCase();
+            const contentLower = template.userMessageTemplate.toLowerCase();
             const cageerfKeywords = ['context', 'analysis', 'goals', 'execution', 'evaluation', 'refinement'];
             let foundComponents = 0;
             
@@ -202,9 +202,9 @@ jobs:
             // Validate template quality
             let validTemplates = 0;
             for (const template of repository.templates.slice(0, 5)) {
-              if (template.content && template.cageerfScore && template.cageerfScore > 0.6) {
+              if (template.baseTemplate && template.cageerfComponents && template.cageerfComponents.length > 3) {
                 validTemplates++;
-                console.log(\`✅ Template '\${template.name}' validation passed (score: \${template.cageerfScore})\`);
+                console.log(\`✅ Template '\${template.name}' validation passed (components: \${template.cageerfComponents.length})\`);
               }
             }
             
@@ -293,8 +293,7 @@ jobs:
               console.log('✅ Semantic Analyzer imported successfully');
             
             // Test analyzer initialization
-            const logger = new MockLogger();
-            const analyzer = new SemanticAnalyzer(logger);
+            const analyzer = new SemanticAnalyzer();
             
             console.log('✅ Semantic Analyzer instantiated');
             
@@ -302,7 +301,7 @@ jobs:
             const testPrompt = {
               id: 'test-prompt-001',
               name: 'Test Analysis Prompt',
-              content: 'Analyze the given data context, establish clear goals, execute systematic evaluation, and refine the framework based on results.',
+              userMessageTemplate: 'Analyze the given data context, establish clear goals, execute systematic evaluation, and refine the framework based on results.',
               description: 'A comprehensive analysis prompt with CAGEERF methodology'
             };
             
@@ -355,7 +354,7 @@ jobs:
             const analyzer = new CAGEERFAnalyzer();
             const testContent = 'Create a data analysis framework that establishes context, performs systematic analysis, defines clear goals, executes validation procedures, evaluates results comprehensively, and refines the methodology based on feedback.';
             
-            const cageerfAnalysis = analyzer.analyzePrompt(testContent);
+            const cageerfAnalysis = analyzer.analyzeText(testContent);
             console.log('✅ Step 1: CAGEERF analysis completed');
             console.log('   Framework score:', cageerfAnalysis.frameworkScore.toFixed(3));
             
@@ -377,16 +376,16 @@ jobs:
               templateStyle: 'professional'
             };
             
-            const generatedTemplate = generator.generateTemplate(templateRequest);
+            const generatedTemplate = await generator.generateTemplate(templateRequest);
             console.log('✅ Step 2: Template generation completed');
-            console.log('   Template CAGEERF score:', generatedTemplate.cageerfScore.toFixed(3));
+            console.log('   Template quality score:', generatedTemplate.qualityScore.toFixed(3));
             
             // Step 3: Classify the generated template
-            const semanticAnalyzer = new SemanticAnalyzer(new MockLogger());
+            const semanticAnalyzer = new SemanticAnalyzer();
             const templatePrompt = {
               id: 'generated-template-001',
               name: 'Generated CAGEERF Template',
-              content: generatedTemplate.content,
+              userMessageTemplate: generatedTemplate.userMessageTemplate,
               description: 'Template generated using CAGEERF methodology'
             };
             
@@ -402,16 +401,16 @@ jobs:
             
             console.log('📊 Workflow validation:');
             console.log('   Initial CAGEERF score:', initialScore.toFixed(3));
-            console.log('   Generated template score:', generatedTemplate.cageerfScore.toFixed(3));
+            console.log('   Generated template score:', generatedTemplate.qualityScore.toFixed(3));
             console.log('   Final classification score:', finalScore.toFixed(3));
             
-            if (generatedTemplate.cageerfScore >= initialScore - 0.05) {
-              console.log('✅ Template generation maintained/improved CAGEERF compliance');
+            if (generatedTemplate.qualityScore >= initialScore - 0.05) {
+              console.log('✅ Template generation maintained/improved quality');
             } else {
-              throw new Error('Template generation degraded CAGEERF compliance');
+              throw new Error('Template generation degraded quality');
             }
             
-            if (finalScore >= generatedTemplate.cageerfScore - 0.05) {
+            if (finalScore >= generatedTemplate.qualityScore - 0.05) {
               console.log('✅ Semantic analysis maintained template quality');
             } else {
               throw new Error('Semantic analysis degraded template quality');
@@ -454,7 +453,7 @@ jobs:
             console.log('📊 Analysis Performance:');
             for (let i = 0; i < testPrompts.length; i++) {
               const start = Date.now();
-              const analysis = analyzer.analyzePrompt(testPrompts[i]);
+              const analysis = analyzer.analyzeText(testPrompts[i]);
               const duration = Date.now() - start;
               console.log(\`   Prompt \${i + 1}: \${duration}ms (score: \${analysis.frameworkScore.toFixed(3)})\`);
               
@@ -469,7 +468,7 @@ jobs:
             
             for (const complexity of complexities) {
               const start = Date.now();
-              const template = generator.generateTemplate({
+              const template = await generator.generateTemplate({
                 useCase: 'Performance Test',
                 domain: 'Testing',
                 complexity: complexity,
@@ -480,7 +479,7 @@ jobs:
                 templateStyle: 'structured'
               });
               const duration = Date.now() - start;
-              console.log(\`   \${complexity}: \${duration}ms (length: \${template.content.length}, score: \${template.cageerfScore.toFixed(3)})\`);
+              console.log(\`   \${complexity}: \${duration}ms (length: \${template.userMessageTemplate.length}, score: \${template.qualityScore.toFixed(3)})\`);
               
               if (duration > 2000) {
                 console.log(\`⚠️  Warning: Generation took \${duration}ms (threshold: 2000ms)\`);

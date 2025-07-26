@@ -113,13 +113,37 @@ export class CAGEERFAnalyzer {
   }
 
   /**
+   * Analyze a text string for CAGEERF methodology compliance
+   * Convenient method for performance testing and simple text analysis
+   */
+  analyzeText(text: string): CAGEERFAnalysis {
+    // Convert string to minimal ConvertedPrompt object for analysis
+    const prompt: ConvertedPrompt = {
+      id: 'text-analysis',
+      name: 'Text Analysis',
+      description: 'Text analysis for CAGEERF compliance',
+      category: 'analysis',
+      userMessageTemplate: text || '',
+      arguments: []
+    };
+    
+    return this.analyzePrompt(prompt);
+  }
+
+  /**
    * Get combined text from prompt for analysis
    */
   private getCombinedText(prompt: ConvertedPrompt): string {
     if (!prompt) {
       return "";
     }
-    return `${prompt.systemMessage || ""} ${prompt.userMessageTemplate || ""} ${prompt.description || ""}`.toLowerCase();
+    
+    // Enhanced null safety for all fields
+    const systemMessage = prompt.systemMessage?.trim() || "";
+    const userMessage = prompt.userMessageTemplate?.trim() || "";
+    const description = prompt.description?.trim() || "";
+    
+    return `${systemMessage} ${userMessage} ${description}`.trim().toLowerCase();
   }
 
   /**
