@@ -183,7 +183,7 @@ jobs:
               console.log(`Warning: Could not read changed_files.txt: ${e.message}`);
               changedFiles = 'Unable to read changed files (this is normal for some PR types)';
             }
-            const status = process.env.GITHUB_JOB_STATUS || '${{ job.status }}';
+            const status = '${{ job.status }}';
             const runUrl = `${context.payload.repository.html_url}/actions/runs/${context.runId}`;
             let message;
             if (status === 'success') {
