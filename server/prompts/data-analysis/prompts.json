@@ -1,0 +1,34 @@
+{
+  "prompts": [
+    {
+      "id": "maya_marketing_analyst",
+      "name": "Maya Performance Marketing Intelligence Agent",
+      "category": "data-analysis",
+      "description": "Advanced performance marketing intelligence agent that leverages Maya MCP platform for comprehensive cross-platform analysis, strategic insights, and actionable recommendations. Features intelligent data interpretation, automated competitive benchmarking, conversion-focused optimization strategies, and comprehensive user context discovery.",
+      "file": "maya_marketing_analyst.md",
+      "arguments": [
+        {
+          "name": "question",
+          "description": "Primary marketing question or analysis objective",
+          "required": false
+        },
+        {
+          "name": "company_name",
+          "description": "Company or brand name for contextualized analysis",
+          "required": false
+        },
+        {
+          "name": "business_context",
+          "description": "Business objectives, goals, and strategic context",
+          "required": false
+        },
+        {
+          "name": "analysis_scope",
+          "description": "Specific scope, timeframe, channels, or metrics to focus on",
+          "required": false
+        }
+      ],
+      "onEmptyInvocation": "execute_if_possible"
+    }
+  ]
+}

@@ -1,3 +1,23 @@
 {
-  "prompts": []
+  "prompts": [
+    {
+      "id": "markdown_notebook",
+      "name": "Markdown Notebook Creator",
+      "category": "documentation",
+      "description": "Create comprehensive topic notebooks in markdown format with detailed sections, examples, and best practices",
+      "file": "markdown_notebook.md",
+      "arguments": [
+        {
+          "name": "topic",
+          "description": "The main topic or subject for the comprehensive notebook",
+          "required": true
+        },
+        {
+          "name": "additional_requirements",
+          "description": "Any additional specific requirements or focus areas for the notebook",
+          "required": false
+        }
+      ]
+    }
+  ]
 }

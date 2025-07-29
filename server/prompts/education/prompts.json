@@ -51,6 +51,142 @@
           "required": false
         }
       ]
+    },
+    {
+      "id": "marketing_video_study_guide",
+      "name": "Marketing Video Study Guide Creator",
+      "category": "education",
+      "description": "Create comprehensive, structured study guides for marketing-related educational videos. Transforms video content into organized learning materials with key concepts, definitions, practice questions, and actionable takeaways based on the Maya marketing platform's framework.",
+      "file": "marketing_video_study_guide.md",
+      "arguments": [
+        {
+          "name": "video_title",
+          "description": "The title of the marketing-related video or educational content",
+          "required": true
+        },
+        {
+          "name": "video_transcript",
+          "description": "Full transcript of the video content",
+          "required": false
+        },
+        {
+          "name": "video_description",
+          "description": "Description or summary of the video content if no transcript available",
+          "required": false
+        },
+        {
+          "name": "marketing_focus",
+          "description": "Primary marketing focus areas: 'SEO', 'SEM', 'Facebook', 'Email', 'Analytics', 'Competition', 'YouTube', or 'General'",
+          "required": false
+        },
+        {
+          "name": "audience_level",
+          "description": "Target audience: 'beginner', 'intermediate', 'advanced', 'expert'",
+          "required": false
+        },
+        {
+          "name": "study_format",
+          "description": "Preferred study guide format: 'comprehensive', 'outline', 'flashcards', 'checklist', or 'interactive'",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "marketing_concept_explainer",
+      "name": "Advanced Marketing Concept Explainer",
+      "category": "education",
+      "description": "Expert-level marketing concept explanation system with comprehensive Maya platform integration. Delivers structured, actionable explanations with industry benchmarks, practical frameworks, real-world examples, and data-driven insights. Features adaptive complexity, competitive analysis capabilities, and future trend integration for maximum learning impact.",
+      "file": "marketing_concept_explainer.md",
+      "arguments": [
+        {
+          "name": "concept",
+          "description": "The marketing concept, metric, or term to explain (e.g., 'CTR', 'organic impressions', 'conversion rate', 'CPA', 'ROAS', 'attribution models', 'marketing qualified leads')",
+          "required": false
+        },
+        {
+          "name": "audience_level",
+          "description": "Target audience knowledge level: 'beginner', 'intermediate', 'advanced', 'expert', or 'c-suite' (default: intermediate)",
+          "required": false
+        },
+        {
+          "name": "specific_context",
+          "description": "Specific business context, industry, or use case where this concept applies (e.g., 'e-commerce', 'SaaS', 'B2B lead gen', 'local business', 'enterprise software')",
+          "required": false
+        },
+        {
+          "name": "related_metrics",
+          "description": "Other related metrics or concepts to explain connections and interdependencies with",
+          "required": false
+        },
+        {
+          "name": "output_format",
+          "description": "Desired explanation format: 'comprehensive', 'quick_reference', 'visual_framework', 'step_by_step', 'comparison_table' (default: comprehensive)",
+          "required": false
+        },
+        {
+          "name": "include_benchmarks",
+          "description": "Include industry benchmarks and typical performance ranges: true/false (default: true)",
+          "required": false
+        },
+        {
+          "name": "practical_focus",
+          "description": "Emphasis area: 'implementation', 'optimization', 'troubleshooting', 'strategic_planning', 'reporting' (default: implementation)",
+          "required": false
+        },
+        {
+          "name": "tool_recommendations",
+          "description": "Include specific tool and platform recommendations: true/false (default: true)",
+          "required": false
+        },
+        {
+          "name": "competitive_analysis",
+          "description": "Include competitive landscape analysis and benchmarking against industry leaders: true/false (default: false)",
+          "required": false
+        },
+        {
+          "name": "future_trends",
+          "description": "Emphasize future trends and emerging developments in this area: true/false (default: false)",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "avi",
+      "name": "Avinash Kaushik Style Explainer",
+      "category": "education",
+      "description": "Explain complex business/marketing concepts with Avinash Kaushik's signature style - cutting through complexity with frameworks, calling out bad practices, and delivering profit-focused actionable insights with passionate conviction.",
+      "file": "avi.md",
+      "arguments": [
+        {
+          "name": "concept",
+          "description": "The business/marketing concept to explain (e.g., 'attribution modeling', 'conversion rate optimization', 'customer lifetime value')",
+          "required": true
+        },
+        {
+          "name": "level",
+          "description": "Knowledge level of the audience (e.g., 'beginner', 'intermediate', 'advanced', 'C-suite')",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "seth_explainer",
+      "name": "Seth Godin Style Explainer",
+      "category": "education",
+      "description": "Explain any concept with Seth Godin's distinctive style - clear, provocative, story-driven explanations that challenge conventional thinking and inspire action with practical wisdom.",
+      "file": "seth_explainer.md",
+      "arguments": [
+        {
+          "name": "concept",
+          "description": "The concept to explain (e.g., 'marketing', 'leadership', 'innovation', 'customer service', 'productivity')",
+          "required": true
+        },
+        {
+          "name": "level",
+          "description": "Knowledge level of the audience (e.g., 'beginner', 'intermediate', 'advanced', 'general audience')",
+          "required": false
+        }
+      ]
     }
   ]
-} 
+}

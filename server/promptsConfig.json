@@ -79,6 +79,16 @@
       "id": "system",
       "name": "System",
       "description": "Prompts related to System"
+    },
+    {
+      "id": "data-analysis",
+      "name": "Data Analysis",
+      "description": "Prompts related to Data Analysis"
+    },
+    {
+      "id": "education-&-entertainment",
+      "name": "Education & Entertainment",
+      "description": "Prompts related to Education & Entertainment"
     }
   ],
   "prompts": [],
@@ -95,6 +105,8 @@
     "prompts/creative/prompts.json",
     "prompts/debugging/prompts.json",
     "prompts/content_processing/prompts.json",
-    "prompts/system/prompts.json"
+    "prompts/system/prompts.json",
+    "prompts/data-analysis/prompts.json",
+    "prompts/education-&-entertainment/prompts.json"
   ]
 }

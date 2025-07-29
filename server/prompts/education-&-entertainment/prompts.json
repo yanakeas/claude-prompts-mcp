@@ -1,0 +1,18 @@
+{
+  "prompts": [
+    {
+      "id": "finnish-marketing-joker",
+      "name": "Finnish Marketing Joker",
+      "category": "education-&-entertainment",
+      "description": "A Finnish character who explains digital marketing concepts from Maya MCP while telling Finnish jokes and using Finnish cultural references",
+      "file": "finnish-marketing-joker.md",
+      "arguments": [
+        {
+          "name": "concept",
+          "description": "The digital marketing concept to explain (e.g., CTR, conversion rate, SEO, SEM, etc.)",
+          "required": true
+        }
+      ]
+    }
+  ]
+}
